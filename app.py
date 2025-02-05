@@ -3,75 +3,61 @@ import pandas as pd
 from datetime import datetime, timedelta
 import locale
 import plotly.express as px
-import numpy as np
 
 # Configuração inicial do Streamlit
 st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
 
-def identificar_coluna_data(df):
-    """Identifica a coluna de data no DataFrame."""
-    # Lista de possíveis nomes de coluna de data
-    possiveis_nomes = [
-        'DATA (D-1)',
-        'DATA(D-1)',
-        'DATA D-1',
-        'DATA',
-        'Data',
-        'data'
-    ]
-    
-    # Primeiro, procura pelo nome exato
-    for col in df.columns:
-        if any(nome.upper() == str(col).upper().strip() for nome in possiveis_nomes):
-            return col
-    
-    # Se não encontrar, procura por colunas que contenham 'DATA'
-    for col in df.columns:
-        if 'DATA' in str(col).upper():
-            return col
-    
-    return None
-
 def carregar_dados(arquivo):
-    """Carrega os dados do arquivo Excel com tratamento de erros aprimorado."""
+    """Carrega os dados do arquivo Excel com tratamento especial para cabeçalhos."""
     try:
         with st.spinner('Carregando dados...'):
-            # Carregar todas as abas
-            todas_abas = pd.read_excel(arquivo, sheet_name=None)
+            # Primeiro, vamos ler a aba de Prazos sem definir cabeçalho
+            df_prazos = pd.read_excel(arquivo, sheet_name='Prazos', header=None)
             
-            # Debug: Mostrar todas as abas encontradas
-            st.write("Abas encontradas:", list(todas_abas.keys()))
+            # Debug: Mostrar as primeiras linhas para identificar onde está o cabeçalho
+            st.write("Primeiras linhas dos dados brutos:")
+            st.write(df_prazos.head())
             
-            dados = {}
+            # Encontrar a linha que contém "DATA (D-1)"
+            for idx, row in df_prazos.iterrows():
+                if any('DATA (D-1)' in str(cell).upper() for cell in row):
+                    header_row = idx
+                    # Recarregar o DataFrame usando esta linha como cabeçalho
+                    df_prazos = pd.read_excel(arquivo, sheet_name='Prazos', header=header_row)
+                    break
             
-            # Processar aba de Prazos
-            if 'Prazos' in todas_abas:
-                df_prazos = todas_abas['Prazos']
-                # Debug: Mostrar colunas encontradas
-                st.write("Colunas na aba Prazos:", list(df_prazos.columns))
-                
-                # Identificar coluna de data
-                coluna_data = identificar_coluna_data(df_prazos)
-                if coluna_data:
-                    st.success(f"Coluna de data identificada: '{coluna_data}'")
-                    df_prazos[coluna_data] = pd.to_datetime(df_prazos[coluna_data], errors='coerce')
-                    dados['Prazos'] = df_prazos
-                else:
-                    st.error("Não foi possível identificar a coluna de data na aba Prazos")
-                    dados['Prazos'] = df_prazos
+            # Debug: Mostrar as colunas após processar o cabeçalho
+            st.write("Colunas encontradas após processamento:", df_prazos.columns.tolist())
             
-            # Processar outras abas
-            for aba in ['Audiências', 'Iniciais']:
-                if aba in todas_abas:
-                    dados[aba] = todas_abas[aba]
-                else:
-                    dados[aba] = pd.DataFrame()
+            # Carregar outras abas
+            try:
+                df_audiencias = pd.read_excel(arquivo, sheet_name='Audiências')
+            except:
+                df_audiencias = pd.DataFrame()
             
-            return dados
+            try:
+                df_iniciais = pd.read_excel(arquivo, sheet_name='Iniciais')
+            except:
+                df_iniciais = pd.DataFrame()
+            
+            return {
+                'Prazos': df_prazos,
+                'Audiências': df_audiencias,
+                'Iniciais': df_iniciais
+            }
             
     except Exception as e:
         st.error(f"Erro ao carregar arquivo: {str(e)}")
+        st.error("Detalhes do erro para debug:")
+        st.write(e)
         return None
+
+def encontrar_coluna_data(df):
+    """Encontra a coluna de data no DataFrame."""
+    for col in df.columns:
+        if 'DATA (D-1)' in str(col).upper():
+            return col
+    return None
 
 def filtrar_dados(df, coluna_data, periodo, filtros_adicionais=None):
     """Filtra os dados por período e filtros adicionais."""
@@ -81,6 +67,9 @@ def filtrar_dados(df, coluna_data, periodo, filtros_adicionais=None):
     hoje = pd.Timestamp.now()
     inicio_semana = hoje - timedelta(days=hoje.weekday())
     fim_semana = inicio_semana + timedelta(days=6)
+    
+    # Converter coluna para datetime se ainda não for
+    df[coluna_data] = pd.to_datetime(df[coluna_data], errors='coerce')
     
     # Filtro de período
     if periodo == 'Esta semana':
@@ -129,7 +118,7 @@ def main():
             with tab1:
                 st.header("Prazos")
                 if not dados['Prazos'].empty:
-                    coluna_data = identificar_coluna_data(dados['Prazos'])
+                    coluna_data = encontrar_coluna_data(dados['Prazos'])
                     if coluna_data:
                         df_filtrado = filtrar_dados(dados['Prazos'], coluna_data, periodo, filtros_adicionais)
                         
@@ -162,6 +151,7 @@ def main():
                             st.info("Nenhum prazo encontrado para os filtros selecionados.")
                     else:
                         st.error("Não foi possível identificar a coluna de data")
+                        st.write("Colunas disponíveis:", dados['Prazos'].columns.tolist())
                 else:
                     st.warning("Nenhum dado encontrado na aba de Prazos")
 
