@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Função para carregar dados
+# Função para carregar dados e garantir formatação correta de datas
 def load_data(file):
     expected_sheets = ["Prazos", "Audiência", "Iniciais"]
     excel_file = pd.ExcelFile(file)
@@ -28,11 +28,12 @@ def load_data(file):
     
     data = {matched_sheets[sheet]: pd.read_excel(file, sheet_name=matched_sheets[sheet], parse_dates=True) for sheet in matched_sheets}
     
-    # Ajustar formatação de datas para dia/mês/ano
+    # Ajustar formatação de datas e ordená-las em ordem crescente
     for sheet in data:
         for col in data[sheet].columns:
-            if data[sheet][col].dtype == 'datetime64[ns]':
-                data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
+            if data[sheet][col].dtype == 'datetime64[ns]' or "data" in col.lower():
+                data[sheet][col] = pd.to_datetime(data[sheet][col], errors='coerce').dt.strftime('%d/%m/%Y')
+                data[sheet] = data[sheet].sort_values(by=[col], ascending=True)
     
     return data, valid_sheets
 
@@ -103,3 +104,4 @@ if uploaded_file:
                 file_name=f"dados_filtrados_{sheet}.csv",
                 mime="text/csv"
             )
+
