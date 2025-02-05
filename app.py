@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import datetime
 
 # Função para carregar dados e garantir formatação correta de datas
 def load_data(file):
@@ -34,9 +35,36 @@ def load_data(file):
             if "data" in col.lower() or data[sheet][col].dtype == 'datetime64[ns]':
                 data[sheet][col] = pd.to_datetime(data[sheet][col], errors='coerce')
                 data[sheet] = data[sheet].sort_values(by=[col], ascending=True)
-                data[sheet][col] = data[sheet][col].dt.strftime('%Y-%m-%d')
+                
+                if sheet == "Audiência":
+                    data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y %H:%M')
+                else:
+                    data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
     
     return data, valid_sheets
+
+# Função para filtrar por período
+def filter_by_period(df, date_column):
+    today = datetime.date.today()
+    start_week = today - datetime.timedelta(days=today.weekday())
+    end_week = start_week + datetime.timedelta(days=6)
+    next_week_start = end_week + datetime.timedelta(days=1)
+    next_week_end = next_week_start + datetime.timedelta(days=6)
+    next_15_days = today + datetime.timedelta(days=15)
+    
+    df[date_column] = pd.to_datetime(df[date_column], errors='coerce', format='%d/%m/%Y')
+    
+    period_filter = st.sidebar.radio("Filtrar por período:", ["Todos", "Essa semana", "Semana seguinte", "Próximos 15 dias"], key=f"{date_column}_filter")
+    
+    if period_filter == "Essa semana":
+        df = df[(df[date_column] >= pd.to_datetime(start_week)) & (df[date_column] <= pd.to_datetime(end_week))]
+    elif period_filter == "Semana seguinte":
+        df = df[(df[date_column] >= pd.to_datetime(next_week_start)) & (df[date_column] <= pd.to_datetime(next_week_end))]
+    elif period_filter == "Próximos 15 dias":
+        df = df[(df[date_column] >= pd.to_datetime(today)) & (df[date_column] <= pd.to_datetime(next_15_days))]
+    
+    df[date_column] = df[date_column].dt.strftime('%d/%m/%Y')
+    return df
 
 # Configuração do Streamlit
 st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
@@ -64,6 +92,10 @@ if uploaded_file:
         with tab_names[i]:
             df = data[sheet]
             st.subheader(f"Visualização da Tabela - {sheet}")
+            
+            date_column = [col for col in df.columns if "data" in col.lower()][0]
+            df = filter_by_period(df, date_column)
+            
             st.dataframe(df)
             
             # Criar filtros dinâmicos sem pré-seleção
@@ -80,15 +112,7 @@ if uploaded_file:
                 if values:
                     filtered_df = filtered_df[filtered_df[col].isin(values)]
             
-            # Exibir dados filtrados ordenados corretamente
-            for col in filtered_df.columns:
-                if "data" in col.lower():
-                    filtered_df[col] = pd.to_datetime(filtered_df[col], errors='coerce')
-            filtered_df = filtered_df.sort_values(by=[col for col in filtered_df.columns if "data" in col.lower()], ascending=True)
-            for col in filtered_df.columns:
-                if "data" in col.lower():
-                    filtered_df[col] = filtered_df[col].dt.strftime('%d/%m/%Y')
-            
+            # Exibir dados filtrados
             st.subheader("Dados Filtrados")
             st.dataframe(filtered_df)
             
