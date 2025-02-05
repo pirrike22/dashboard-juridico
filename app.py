@@ -240,9 +240,46 @@ elif view == "Audiências":
     
     # Calendário de audiências
     if not audiencias_filtradas.empty:
-        fig = px.timeline(audiencias_filtradas, x_start='Data', y='Processo',
-                         title='Calendário de Audiências')
+        # Criar figura base
+        fig = go.Figure()
+        
+        # Adicionar as audiências como pontos
+        fig.add_trace(go.Scatter(
+            x=audiencias_filtradas['Data'],
+            y=audiencias_filtradas['Processo'],
+            mode='markers+text',
+            marker=dict(size=12, symbol='circle'),
+            text=audiencias_filtradas['Tipo'] if 'Tipo' in audiencias_filtradas.columns else None,
+            textposition='top center'
+        ))
+        
+        # Configurar o layout
+        fig.update_layout(
+            title='Calendário de Audiências',
+            xaxis_title='Data',
+            yaxis_title='Processo',
+            height=max(400, len(audiencias_filtradas) * 30),  # Ajusta altura baseado no número de audiências
+            showlegend=False,
+            xaxis=dict(
+                type='date',
+                tickformat='%d/%m/%Y'
+            )
+        )
+        
         st.plotly_chart(fig, use_container_width=True)
+        
+        # Adicionar tabela com detalhes
+        st.subheader("Detalhes das Audiências")
+        st.dataframe(
+            audiencias_filtradas.sort_values('Data'),
+            column_config={
+                "Data": st.column_config.DatetimeColumn(
+                    "Data",
+                    format="DD/MM/YYYY",
+                ),
+            },
+            hide_index=True,
+        )
 
 # Visão de Processos Iniciais
 else:
