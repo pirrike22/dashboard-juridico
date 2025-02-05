@@ -6,6 +6,14 @@ import numpy as np
 # Configuração inicial do Streamlit
 st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
 
+# URL da planilha
+SHEET_ID = "1fM5Oq6McjWFTDbUTbimMJfcnB2J1Oiy-_UY-VnDcnxE"
+SHEET_NAMES = {
+    'Prazos': 'Prazos',
+    'Audiências': 'Audiências',
+    'Iniciais': 'Iniciais'
+}
+
 def limpar_valores(val):
     """Limpa valores problemáticos."""
     if pd.isna(val) or val is None:
@@ -14,45 +22,38 @@ def limpar_valores(val):
 
 def processar_dataframe(df):
     """Processa o DataFrame removendo valores problemáticos."""
-    # Criar uma cópia do DataFrame
     df = df.copy()
-    
-    # Remover linhas totalmente vazias
     df = df.dropna(how='all')
     
-    # Para cada coluna que não é data, limpar valores
     for col in df.columns:
         if df[col].dtype != 'datetime64[ns]':
             df[col] = df[col].apply(limpar_valores)
     
     return df
 
-def carregar_dados(arquivo):
-    """Carrega dados do Excel com tratamento específico para cada aba."""
+def carregar_dados_sheets():
+    """Carrega dados diretamente do Google Sheets usando URL pública."""
     try:
-        # Carregar cada aba
-        df_prazos = pd.read_excel(arquivo, sheet_name='Prazos')
-        df_audiencias = pd.read_excel(arquivo, sheet_name='Audiências')
-        df_iniciais = pd.read_excel(arquivo, sheet_name='Iniciais')
+        dados = {}
+        for nome_aba, sheet_name in SHEET_NAMES.items():
+            url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+            
+            try:
+                df = pd.read_csv(url)
+                dados[nome_aba] = processar_dataframe(df)
+                st.write(f"Colunas encontradas em {nome_aba}:", df.columns.tolist())
+            except Exception as e:
+                st.error(f"Erro ao carregar aba {nome_aba}: {str(e)}")
+                dados[nome_aba] = pd.DataFrame()
         
-        # Debug: mostrar colunas de cada aba
-        st.write("Colunas encontradas em Prazos:", df_prazos.columns.tolist())
-        st.write("Colunas encontradas em Audiências:", df_audiencias.columns.tolist())
-        st.write("Colunas encontradas em Iniciais:", df_iniciais.columns.tolist())
-        
-        return {
-            'Prazos': processar_dataframe(df_prazos),
-            'Audiências': processar_dataframe(df_audiencias),
-            'Iniciais': processar_dataframe(df_iniciais)
-        }
+        return dados
     except Exception as e:
-        st.error(f"Erro ao carregar dados: {str(e)}")
+        st.error(f"Erro ao carregar dados do Google Sheets: {str(e)}")
         return None
 
 def aplicar_filtros(df, coluna_data, periodo):
     """Aplica filtros de data ao DataFrame."""
     try:
-        # Converter coluna de data
         df[coluna_data] = pd.to_datetime(df[coluna_data], errors='coerce')
         df = df.dropna(subset=[coluna_data])
         
@@ -77,16 +78,10 @@ def aplicar_filtros(df, coluna_data, periodo):
 def exibir_dataframe(df, coluna_data):
     """Exibe o DataFrame de forma segura."""
     try:
-        # Processar o DataFrame para exibição
         df_display = df.copy()
-        
-        # Converter datas para o formato correto
         df_display[coluna_data] = pd.to_datetime(df_display[coluna_data], errors='coerce')
-        
-        # Remover valores NaN
         df_display = df_display.fillna('')
         
-        # Tentar exibir com configuração de coluna de data
         st.dataframe(
             df_display,
             column_config={
@@ -99,7 +94,6 @@ def exibir_dataframe(df, coluna_data):
         )
     except Exception as e:
         st.error(f"Erro ao exibir dados: {str(e)}")
-        # Fallback para exibição simples
         st.dataframe(df_display, hide_index=True)
 
 def exibir_aba(dados, nome_aba, periodo, filtros_adicionais):
@@ -125,10 +119,8 @@ def exibir_aba(dados, nome_aba, periodo, filtros_adicionais):
         st.write("Colunas disponíveis:", df.columns.tolist())
         return
     
-    # Aplicar filtros
     df_filtrado = aplicar_filtros(df, coluna_data, periodo)
     
-    # Aplicar filtros adicionais
     hoje = pd.Timestamp.now()
     if 'Apenas urgentes' in filtros_adicionais:
         df_filtrado = df_filtrado[df_filtrado[coluna_data] <= hoje + timedelta(days=3)]
@@ -137,7 +129,6 @@ def exibir_aba(dados, nome_aba, periodo, filtros_adicionais):
     if 'Ordenar por data' in filtros_adicionais:
         df_filtrado = df_filtrado.sort_values(coluna_data)
     
-    # Exibir métricas
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric(f"Total de {nome_aba}", len(df_filtrado))
@@ -148,7 +139,6 @@ def exibir_aba(dados, nome_aba, periodo, filtros_adicionais):
         atrasados = len(df_filtrado[df_filtrado[coluna_data] < hoje])
         st.metric(f"{nome_aba} Atrasados", atrasados)
     
-    # Exibir dados
     if not df_filtrado.empty:
         exibir_dataframe(df_filtrado, coluna_data)
     else:
@@ -157,38 +147,41 @@ def exibir_aba(dados, nome_aba, periodo, filtros_adicionais):
 def main():
     st.title("Dashboard Jurídico")
     
-    uploaded_file = st.file_uploader("Carregar arquivo Excel", type=['xlsx'])
+    # Carregar dados do Google Sheets
+    with st.spinner('Carregando dados do Google Sheets...'):
+        dados = carregar_dados_sheets()
     
-    if uploaded_file is not None:
-        dados = carregar_dados(uploaded_file)
+    if dados:
+        # Sidebar com filtros
+        st.sidebar.title("Filtros")
+        periodo = st.sidebar.selectbox(
+            "Período",
+            ["Esta semana", "Próxima semana", "Próximos 15 dias", "Todos"]
+        )
         
-        if dados:
-            # Sidebar com filtros
-            st.sidebar.title("Filtros")
-            periodo = st.sidebar.selectbox(
-                "Período",
-                ["Esta semana", "Próxima semana", "Próximos 15 dias", "Todos"]
-            )
-            
-            filtros_adicionais = st.sidebar.multiselect(
-                "Filtros adicionais",
-                ["Apenas urgentes", "Apenas atrasados", "Ordenar por data"]
-            )
-            
-            # Abas
-            tab1, tab2, tab3 = st.tabs(["Prazos", "Audiências", "Iniciais"])
-            
-            with tab1:
-                st.header("Prazos")
-                exibir_aba(dados, 'Prazos', periodo, filtros_adicionais)
-            
-            with tab2:
-                st.header("Audiências")
-                exibir_aba(dados, 'Audiências', periodo, filtros_adicionais)
-            
-            with tab3:
-                st.header("Iniciais")
-                exibir_aba(dados, 'Iniciais', periodo, filtros_adicionais)
+        filtros_adicionais = st.sidebar.multiselect(
+            "Filtros adicionais",
+            ["Apenas urgentes", "Apenas atrasados", "Ordenar por data"]
+        )
+        
+        # Botão para atualizar dados
+        if st.sidebar.button("Atualizar Dados"):
+            st.experimental_rerun()
+        
+        # Abas
+        tab1, tab2, tab3 = st.tabs(["Prazos", "Audiências", "Iniciais"])
+        
+        with tab1:
+            st.header("Prazos")
+            exibir_aba(dados, 'Prazos', periodo, filtros_adicionais)
+        
+        with tab2:
+            st.header("Audiências")
+            exibir_aba(dados, 'Audiências', periodo, filtros_adicionais)
+        
+        with tab3:
+            st.header("Iniciais")
+            exibir_aba(dados, 'Iniciais', periodo, filtros_adicionais)
 
 if __name__ == "__main__":
     main()
