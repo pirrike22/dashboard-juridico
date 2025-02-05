@@ -22,60 +22,44 @@ def load_data():
         # Carregar dados de cada URL
         dfs = {}
         
-        for name, url in URLS.items():
-            response = requests.get(url)
-            response.raise_for_status()
-            
-            # Debug: Mostrar os primeiros caracteres da resposta
-            st.write(f"Primeiros caracteres da resposta de {name}:")
-            st.write(response.text[:200])
-            
-            # Ler CSV da resposta
-            df = pd.read_csv(StringIO(response.text))
-            
-            # Debug: Mostrar colunas disponíveis
-            st.write(f"Colunas disponíveis em {name}:")
-            st.write(df.columns.tolist())
-            
-            # Debug: Mostrar primeiras linhas
-            st.write(f"Primeiras linhas de {name}:")
-            st.write(df.head())
-            
-            dfs[name] = df
+        # Carregar Prazos
+        response = requests.get(URLS['prazos'])
+        response.raise_for_status()
+        df_prazos = pd.read_csv(StringIO(response.text), encoding='utf-8')
+        # Renomear a coluna de data
+        df_prazos = df_prazos.rename(columns={'Unnamed: 12': 'Data'})
+        df_prazos['Data'] = pd.to_datetime(df_prazos['Data'], format='%d/%m/%y', errors='coerce')
+        dfs['prazos'] = df_prazos
         
-        # Tentar identificar a coluna de data em cada DataFrame
-        for name, df in dfs.items():
-            st.write(f"Tentando identificar coluna de data em {name}")
-            for col in df.columns:
-                st.write(f"Coluna: {col}")
-                try:
-                    # Tentar converter para datetime
-                    pd.to_datetime(df[col])
-                    st.write(f"✓ Coluna {col} pode ser convertida para data")
-                except:
-                    st.write(f"✗ Coluna {col} não é uma data")
+        # Carregar Audiências
+        response = requests.get(URLS['audiencias'])
+        response.raise_for_status()
+        df_audiencias = pd.read_csv(StringIO(response.text), encoding='utf-8')
+        df_audiencias['DATA'] = pd.to_datetime(df_audiencias['DATA'], format='%d/%m/%y', errors='coerce')
+        df_audiencias = df_audiencias.rename(columns={
+            'DATA': 'Data',
+            'TIPO DE AUDIÃNCIA': 'Tipo',
+            'VARA/TURMA': 'Vara',
+            'RESPONSÃVEL': 'Responsavel'
+        })
+        dfs['audiencias'] = df_audiencias
         
-        # Converter colunas de data com base nas colunas identificadas
-        if 'data' in dfs['prazos'].columns:
-            dfs['prazos']['data'] = pd.to_datetime(dfs['prazos']['data'])
-        elif 'Data' in dfs['prazos'].columns:
-            dfs['prazos']['Data'] = pd.to_datetime(dfs['prazos']['Data'])
-            
-        if 'data' in dfs['audiencias'].columns:
-            dfs['audiencias']['data'] = pd.to_datetime(dfs['audiencias']['data'])
-        elif 'Data' in dfs['audiencias'].columns:
-            dfs['audiencias']['Data'] = pd.to_datetime(dfs['audiencias']['Data'])
-            
-        if 'data_distribuicao' in dfs['iniciais'].columns:
-            dfs['iniciais']['data_distribuicao'] = pd.to_datetime(dfs['iniciais']['data_distribuicao'])
-        elif 'Data Distribuição' in dfs['iniciais'].columns:
-            dfs['iniciais']['Data Distribuição'] = pd.to_datetime(dfs['iniciais']['Data Distribuição'])
+        # Carregar Iniciais
+        response = requests.get(URLS['iniciais'])
+        response.raise_for_status()
+        df_iniciais = pd.read_csv(StringIO(response.text), encoding='utf-8')
+        df_iniciais['DATA'] = pd.to_datetime(df_iniciais['DATA'], format='%d/%m/%y', errors='coerce')
+        df_iniciais = df_iniciais.rename(columns={
+            'DATA': 'Data',
+            'MATÃRIA': 'Tipo de Ação',
+            'DISTRIBUÃDO': 'Status'
+        })
+        dfs['iniciais'] = df_iniciais
         
         return dfs['prazos'], dfs['audiencias'], dfs['iniciais']
         
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {str(e)}")
-        st.write("Detalhes do erro:", str(e))
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # Título do Dashboard
@@ -84,7 +68,22 @@ st.title("Dashboard Jurídico")
 # Carregar dados
 df_prazos, df_audiencias, df_iniciais = load_data()
 
-# Parar aqui para debug
+# Debug - Mostrar informações dos DataFrames
+st.write("### Debug - Estrutura dos Dados")
+
+st.write("#### Prazos")
+st.write("Colunas:", df_prazos.columns.tolist())
+st.write("Amostra:", df_prazos.head())
+
+st.write("#### Audiências")
+st.write("Colunas:", df_audiencias.columns.tolist())
+st.write("Amostra:", df_audiencias.head())
+
+st.write("#### Iniciais")
+st.write("Colunas:", df_iniciais.columns.tolist())
+st.write("Amostra:", df_iniciais.head())
+
+# Parar aqui para verificar os dados
 st.stop()
 
-# Resto do código ...
+[... resto do código ...]
