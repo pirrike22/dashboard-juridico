@@ -13,86 +13,52 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-def find_date_column(df):
-    """
-    Identifica a coluna que contém datas no DataFrame.
-    Retorna o nome da coluna e o DataFrame com a coluna convertida.
-    """
-    possible_date_columns = ['Data', 'DATA', 'Data do Prazo', 'DATA DO PRAZO', 
-                           'Data da Audiência', 'DATA DA AUDIÊNCIA',
-                           'Data Distribuição', 'DATA DISTRIBUIÇÃO', 
-                           'Data de Distribuição', 'data']
-    
-    # Primeiro, procura por colunas com nomes conhecidos
-    for col in possible_date_columns:
-        if col in df.columns:
-            try:
-                df[col] = pd.to_datetime(df[col], format='mixed', errors='coerce')
-                return col, df
-            except:
-                continue
-    
-    # Se não encontrar, tenta identificar qualquer coluna que possa ser convertida para data
-    for col in df.columns:
-        try:
-            test_conversion = pd.to_datetime(df[col], format='mixed', errors='coerce')
-            if not test_conversion.isna().all():  # Se conseguiu converter pelo menos alguns valores
-                df[col] = test_conversion
-                return col, df
-        except:
-            continue
-    
-    return None, df
-
 def load_data(uploaded_file):
-    """
-    Carrega e processa os dados do arquivo Excel.
-    """
     try:
         # Leitura inicial do arquivo
         excel_file = io.BytesIO(uploaded_file.getvalue())
+        xls = pd.ExcelFile(excel_file)
         
-        # Lista de abas necessárias
-        required_sheets = ['prazos', 'audiências', 'audiencias', 'iniciais']
+        # Carregar as abas necessárias
+        dfs = {}
+        sheet_names = [s.lower() for s in xls.sheet_names]
         
-        # Tenta ler todas as abas do arquivo
-        with pd.ExcelFile(excel_file) as xls:
-            sheet_names = xls.sheet_names
+        # Carregar aba Prazos
+        for sheet in ['prazos', 'PRAZOS', 'Prazos']:
+            if sheet.lower() in sheet_names:
+                dfs['prazos'] = pd.read_excel(xls, sheet)
+                if 'Data' in dfs['prazos'].columns:
+                    dfs['prazos']['Data'] = pd.to_datetime(dfs['prazos']['Data'], errors='coerce')
+                break
+        
+        # Carregar aba Audiências
+        for sheet in ['audiências', 'AUDIÊNCIAS', 'Audiencias', 'audiencias']:
+            if sheet.lower() in sheet_names:
+                dfs['audiencias'] = pd.read_excel(xls, sheet)
+                if 'Data' in dfs['audiencias'].columns:
+                    dfs['audiencias']['Data'] = pd.to_datetime(dfs['audiencias']['Data'], errors='coerce')
+                if 'Horário' in dfs['audiencias'].columns:
+                    dfs['audiencias']['Horário'] = pd.to_datetime(dfs['audiencias']['Horário'], format='mixed', errors='coerce')
+                break
+        
+        # Carregar aba Iniciais
+        for sheet in ['iniciais', 'INICIAIS', 'Iniciais']:
+            if sheet.lower() in sheet_names:
+                dfs['iniciais'] = pd.read_excel(xls, sheet)
+                if 'Data' in dfs['iniciais'].columns:
+                    dfs['iniciais']['Data'] = pd.to_datetime(dfs['iniciais']['Data'], errors='coerce')
+                break
+        
+        # Verificar se todas as abas necessárias foram carregadas
+        required_sheets = ['prazos', 'audiencias', 'iniciais']
+        missing_sheets = [sheet for sheet in required_sheets if sheet not in dfs]
+        
+        if missing_sheets:
+            st.error(f"Abas não encontradas: {', '.join(missing_sheets)}")
+            return None, None, None
             
-            # Dicionário para armazenar os DataFrames
-            dfs = {}
-            
-            # Tenta carregar cada aba necessária
-            for sheet in sheet_names:
-                sheet_lower = sheet.lower()
-                if sheet_lower in required_sheets:
-                    try:
-                        df = pd.read_excel(xls, sheet)
-                        date_col, df = find_date_column(df)
-                        
-                        if date_col:
-                            # Padroniza o nome da coluna de data
-                            df = df.rename(columns={date_col: 'Data'})
-                            dfs[sheet_lower] = df
-                    except Exception as e:
-                        st.error(f"Erro ao processar a aba {sheet}: {str(e)}")
-            
-            # Atribui os DataFrames encontrados
-            prazos_df = dfs.get('prazos')
-            audiencias_df = dfs.get('audiências') or dfs.get('audiencias')
-            iniciais_df = dfs.get('iniciais')
-            
-            # Verifica se todos os DataFrames necessários foram encontrados
-            if not all([prazos_df is not None, audiencias_df is not None, iniciais_df is not None]):
-                missing_sheets = []
-                if prazos_df is None: missing_sheets.append('Prazos')
-                if audiencias_df is None: missing_sheets.append('Audiências')
-                if iniciais_df is None: missing_sheets.append('Iniciais')
-                st.error(f"Abas não encontradas: {', '.join(missing_sheets)}")
-                return None, None, None
-            
-            return prazos_df, audiencias_df, iniciais_df
-            
+        return dfs['prazos'], dfs['audiencias'], dfs['iniciais']
+        
     except Exception as e:
         st.error(f"Erro ao processar o arquivo: {str(e)}")
         return None, None, None
@@ -138,29 +104,13 @@ if not uploaded_file:
 with st.spinner("Processando o arquivo..."):
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-if any(df is None for df in [prazos_df, audiencias_df, iniciais_df]):
+if prazos_df is None or audiencias_df is None or iniciais_df is None:
     st.stop()
-
-# Mostra informações sobre os dados carregados
-with st.expander("ℹ️ Informações sobre os dados carregados"):
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.write("**Prazos:**")
-        st.write(f"- Total de registros: {len(prazos_df)}")
-        st.write(f"- Colunas: {', '.join(prazos_df.columns)}")
-    with col2:
-        st.write("**Audiências:**")
-        st.write(f"- Total de registros: {len(audiencias_df)}")
-        st.write(f"- Colunas: {', '.join(audiencias_df.columns)}")
-    with col3:
-        st.write("**Iniciais:**")
-        st.write(f"- Total de registros: {len(iniciais_df)}")
-        st.write(f"- Colunas: {', '.join(iniciais_df.columns)}")
 
 # Seleção da visão
 st.sidebar.title("Filtros")
 view = st.sidebar.radio(
-    "Selecione a visão",
+    "Selecione a visualização",
     ["Dashboard Geral", "Prazos", "Audiências", "Processos Iniciais"]
 )
 
@@ -223,32 +173,22 @@ elif view == "Audiências":
         if tipos:
             audiencias_filtradas = audiencias_filtradas[audiencias_filtradas['Tipo'].isin(tipos)]
     
-    # Formatação das colunas de data e horário
+    # Formatação das colunas de data e horário para exibição
     audiencias_display = audiencias_filtradas.copy()
-    
-    # Formatar a coluna de data para dd/mm/aaaa
     audiencias_display['Data'] = audiencias_display['Data'].dt.strftime('%d/%m/%Y')
     
-    # Formatar a coluna de horário se existir (removendo segundos)
     if 'Horário' in audiencias_display.columns:
         audiencias_display['Horário'] = pd.to_datetime(audiencias_display['Horário'], format='mixed', errors='coerce').dt.strftime('%H:%M')
     
     # Exibição dos dados formatados
-    st.dataframe(
-        audiencias_display,
-        hide_index=True,
-        column_config={
-            "Data": st.column_config.TextColumn("Data", width="medium"),
-            "Horário": st.column_config.TextColumn("Horário", width="small")
-        }
-    )
+    st.dataframe(audiencias_display, hide_index=True)
     
     # Calendário de audiências
-    if not audiencias_filtradas.empty:
+    if len(audiencias_filtradas) > 0:
         # Verificar e usar o nome correto da coluna para processos
         processo_column = next((col for col in audiencias_filtradas.columns 
                               if col.lower() in ['processo', 'nº processo', 'numero processo', 'núm. processo']), 
-                             audiencias_filtradas.columns[0])  # Usa primeira coluna se não encontrar
+                             audiencias_filtradas.columns[0])
         
         # Criar figura base
         fig = go.Figure()
