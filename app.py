@@ -26,9 +26,9 @@ def load_data(file):
         st.error("Nenhuma das abas esperadas ('Prazos', 'Audiência', 'Iniciais') foi encontrada no arquivo.")
         return None, None
     
-    data = {sheet: pd.read_excel(file, sheet_name=matched_sheets[sheet]) for sheet in matched_sheets}
+    data = {matched_sheets[sheet]: pd.read_excel(file, sheet_name=matched_sheets[sheet]) for sheet in matched_sheets}
     
-    # Ajustar formatação de datas
+    # Ajustar formatação de datas para dia/mês/ano
     for sheet in data:
         for col in data[sheet].select_dtypes(include=['datetime']):
             data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
@@ -54,6 +54,10 @@ if uploaded_file:
     tab_names = st.tabs(sheets)
     
     for i, sheet in enumerate(sheets):
+        if sheet not in data:
+            st.warning(f"A aba '{sheet}' não pôde ser carregada corretamente.")
+            continue
+        
         with tab_names[i]:
             df = data[sheet]
             st.subheader(f"Visualização da Tabela - {sheet}")
@@ -98,3 +102,4 @@ if uploaded_file:
                 file_name=f"dados_filtrados_{sheet}.csv",
                 mime="text/csv"
             )
+
