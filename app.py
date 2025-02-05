@@ -3,296 +3,290 @@ import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
-from PIL import Image
-import numpy as np
 import io
 
-st.set_page_config(page_title="Dashboard Jurídica", layout="wide")
+# Configuração inicial do Streamlit
+st.set_page_config(
+    page_title="Dashboard Jurídica",
+    page_icon="⚖️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Função para verificar e converter colunas de data
-def convert_date_columns(df, possible_date_columns):
+# Função para identificar a coluna de data em um DataFrame
+def find_date_column(df):
+    """
+    Identifica a coluna que contém datas no DataFrame.
+    Retorna o nome da coluna e o DataFrame com a coluna convertida.
+    """
+    possible_date_columns = ['Data', 'DATA', 'Data do Prazo', 'DATA DO PRAZO', 
+                           'Data da Audiência', 'DATA DA AUDIÊNCIA',
+                           'Data Distribuição', 'DATA DISTRIBUIÇÃO', 
+                           'Data de Distribuição', 'data']
+    
+    # Primeiro, procura por colunas com nomes conhecidos
     for col in possible_date_columns:
         if col in df.columns:
             try:
-                df[col] = pd.to_datetime(df[col], errors='coerce', format='mixed')
+                df[col] = pd.to_datetime(df[col], format='mixed', errors='coerce')
+                return col, df
             except:
-                st.error(f"Erro ao converter a coluna {col} para data")
-    return df
-
-# Função para carregar os dados do arquivo uploadado
-def load_data(uploaded_file):
-    if uploaded_file is not None:
+                continue
+    
+    # Se não encontrar, tenta identificar qualquer coluna que possa ser convertida para data
+    for col in df.columns:
         try:
-            # Carregando as abas específicas
-            excel_file = io.BytesIO(uploaded_file.getvalue())
+            test_conversion = pd.to_datetime(df[col], format='mixed', errors='coerce')
+            if not test_conversion.isna().all():  # Se conseguiu converter pelo menos alguns valores
+                df[col] = test_conversion
+                return col, df
+        except:
+            continue
+    
+    return None, df
+
+def load_data(uploaded_file):
+    """
+    Carrega e processa os dados do arquivo Excel.
+    """
+    try:
+        # Leitura inicial do arquivo
+        excel_file = io.BytesIO(uploaded_file.getvalue())
+        
+        # Tenta ler todas as abas do arquivo
+        with pd.ExcelFile(excel_file) as xls:
+            sheet_names = xls.sheet_names
             
-            # Tentativa de leitura com diferentes nomes de abas possíveis
-            try:
-                prazos_df = pd.read_excel(excel_file, sheet_name='Prazos')
-            except:
+            # Dicionário para armazenar os DataFrames
+            dfs = {}
+            
+            # Tenta carregar cada aba
+            for sheet in sheet_names:
                 try:
-                    prazos_df = pd.read_excel(excel_file, sheet_name='PRAZOS')
-                except:
-                    st.error("Não foi possível encontrar a aba 'Prazos'")
-                    return None, None, None
-            
-            try:
-                audiencias_df = pd.read_excel(excel_file, sheet_name='Audiências')
-            except:
-                try:
-                    audiencias_df = pd.read_excel(excel_file, sheet_name='AUDIÊNCIAS')
-                except:
-                    try:
-                        audiencias_df = pd.read_excel(excel_file, sheet_name='Audiencias')
-                    except:
-                        st.error("Não foi possível encontrar a aba 'Audiências'")
-                        return None, None, None
-            
-            try:
-                iniciais_df = pd.read_excel(excel_file, sheet_name='Iniciais')
-            except:
-                try:
-                    iniciais_df = pd.read_excel(excel_file, sheet_name='INICIAIS')
-                except:
-                    st.error("Não foi possível encontrar a aba 'Iniciais'")
-                    return None, None, None
-            
-            # Lista de possíveis nomes de colunas de data
-            date_columns_prazos = ['Data', 'DATA', 'Data do Prazo', 'DATA DO PRAZO']
-            date_columns_audiencias = ['Data', 'DATA', 'Data da Audiência', 'DATA DA AUDIÊNCIA']
-            date_columns_iniciais = ['Data Distribuição', 'DATA DISTRIBUIÇÃO', 'Data de Distribuição']
-            
-            # Convertendo colunas de data
-            prazos_df = convert_date_columns(prazos_df, date_columns_prazos)
-            audiencias_df = convert_date_columns(audiencias_df, date_columns_audiencias)
-            iniciais_df = convert_date_columns(iniciais_df, date_columns_iniciais)
-            
-            # Verificar se as colunas de data foram encontradas e convertidas
-            if not any(col in prazos_df.columns for col in date_columns_prazos):
-                st.error("Não foi encontrada uma coluna de data válida na aba Prazos")
-                return None, None, None
-                
-            if not any(col in audiencias_df.columns for col in date_columns_audiencias):
-                st.error("Não foi encontrada uma coluna de data válida na aba Audiências")
-                return None, None, None
-                
-            if not any(col in iniciais_df.columns for col in date_columns_iniciais):
-                st.error("Não foi encontrada uma coluna de data válida na aba Iniciais")
-                return None, None, None
-            
-            # Padronizar os nomes das colunas de data
-            for col in prazos_df.columns:
-                if col.upper() in [c.upper() for c in date_columns_prazos]:
-                    prazos_df = prazos_df.rename(columns={col: 'Data'})
+                    df = pd.read_excel(xls, sheet)
+                    date_col, df = find_date_column(df)
                     
-            for col in audiencias_df.columns:
-                if col.upper() in [c.upper() for c in date_columns_audiencias]:
-                    audiencias_df = audiencias_df.rename(columns={col: 'Data'})
-                    
-            for col in iniciais_df.columns:
-                if col.upper() in [c.upper() for c in date_columns_iniciais]:
-                    iniciais_df = iniciais_df.rename(columns={col: 'Data Distribuição'})
+                    if date_col:
+                        # Padroniza o nome da coluna de data
+                        df = df.rename(columns={date_col: 'Data'})
+                        dfs[sheet.lower()] = df
+                    else:
+                        st.warning(f"Não foi possível identificar a coluna de data na aba {sheet}")
+                except Exception as e:
+                    st.error(f"Erro ao processar a aba {sheet}: {str(e)}")
+            
+            # Verifica se encontrou as abas necessárias
+            required_sheets = ['prazos', 'audiências', 'audiencias', 'iniciais']
+            found_sheets = [sheet.lower() for sheet in dfs.keys()]
+            
+            prazos_df = None
+            audiencias_df = None
+            iniciais_df = None
+            
+            # Atribui os DataFrames encontrados
+            if 'prazos' in found_sheets:
+                prazos_df = dfs['prazos']
+            
+            if 'audiências' in found_sheets or 'audiencias' in found_sheets:
+                audiencias_df = next((dfs[k] for k in found_sheets if k in ['audiências', 'audiencias']), None)
+            
+            if 'iniciais' in found_sheets:
+                iniciais_df = dfs['iniciais']
+            
+            # Verifica se todos os DataFrames necessários foram encontrados
+            if not all([prazos_df is not None, audiencias_df is not None, iniciais_df is not None]):
+                missing_sheets = []
+                if prazos_df is None: missing_sheets.append('Prazos')
+                if audiencias_df is None: missing_sheets.append('Audiências')
+                if iniciais_df is None: missing_sheets.append('Iniciais')
+                st.error(f"Abas não encontradas: {', '.join(missing_sheets)}")
+                return None, None, None
             
             return prazos_df, audiencias_df, iniciais_df
             
-        except Exception as e:
-            st.error(f"Erro ao processar o arquivo: {str(e)}")
-            return None, None, None
-    return None, None, None
+    except Exception as e:
+        st.error(f"Erro ao processar o arquivo: {str(e)}")
+        return None, None, None
 
-# Interface para upload do arquivo
-st.title("Dashboard Jurídica")
-st.write("Para começar, faça o upload do arquivo Excel com os dados atualizados:")
-
-uploaded_file = st.file_uploader("Escolha o arquivo Excel", type=['xlsx'])
-
-if uploaded_file is None:
-    st.warning("Por favor, faça o upload do arquivo Excel para visualizar a dashboard.")
-    st.stop()
-
-# Carregando os dados após o upload
-prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
-
-if prazos_df is None or audiencias_df is None or iniciais_df is None:
-    st.error("Não foi possível carregar os dados. Verifique se o arquivo está no formato correto.")
-    st.stop()
-
-# Mostrar informações sobre as colunas encontradas
-with st.expander("Informações sobre as colunas carregadas"):
-    st.write("Colunas da aba Prazos:", list(prazos_df.columns))
-    st.write("Colunas da aba Audiências:", list(audiencias_df.columns))
-    st.write("Colunas da aba Iniciais:", list(iniciais_df.columns))
-
-# Configuração da sidebar
-st.sidebar.title("Filtros")
-selected_view = st.sidebar.selectbox(
-    "Selecione a visualização",
-    ["Visão Geral", "Prazos", "Audiências", "Iniciais"]
-)
-
-# Função para filtrar por período
-def filter_by_period(df, date_column):
+# Função para filtrar dados por período
+def filter_by_period(df):
     periodo = st.sidebar.selectbox(
-        "Selecione o período",
-        ["Esta semana", "Próxima semana", "Próximos 15 dias", "Todos"]
+        "Filtrar por período",
+        ["Todos", "Esta semana", "Próxima semana", "Próximos 15 dias"]
     )
     
-    hoje = pd.Timestamp.now()
-    if periodo == "Esta semana":
-        inicio_semana = hoje - timedelta(days=hoje.weekday())
-        fim_semana = inicio_semana + timedelta(days=6)
-        return df[df[date_column].between(inicio_semana, fim_semana)]
-    elif periodo == "Próxima semana":
-        inicio_prox_semana = hoje - timedelta(days=hoje.weekday()) + timedelta(days=7)
-        fim_prox_semana = inicio_prox_semana + timedelta(days=6)
-        return df[df[date_column].between(inicio_prox_semana, fim_prox_semana)]
-    elif periodo == "Próximos 15 dias":
-        return df[df[date_column].between(hoje, hoje + timedelta(days=15))]
-    else:
+    if periodo == "Todos":
         return df
+    
+    hoje = pd.Timestamp.now().normalize()
+    
+    if periodo == "Esta semana":
+        inicio = hoje - timedelta(days=hoje.weekday())
+        fim = inicio + timedelta(days=6)
+    elif periodo == "Próxima semana":
+        inicio = hoje - timedelta(days=hoje.weekday()) + timedelta(days=7)
+        fim = inicio + timedelta(days=6)
+    else:  # Próximos 15 dias
+        inicio = hoje
+        fim = hoje + timedelta(days=15)
+    
+    return df[df['Data'].between(inicio, fim)]
 
-# Visão Geral
-if selected_view == "Visão Geral":
-    st.header("Visão Geral")
-    
+# Interface principal
+st.title("🔍 Dashboard Jurídica")
+
+# Upload do arquivo
+uploaded_file = st.file_uploader(
+    "Faça o upload do arquivo Excel com os dados",
+    type=['xlsx', 'xls'],
+    help="O arquivo deve conter as abas: Prazos, Audiências e Iniciais"
+)
+
+if not uploaded_file:
+    st.info("👆 Por favor, faça o upload do arquivo Excel para começar.")
+    st.stop()
+
+# Carrega os dados
+with st.spinner("Processando o arquivo..."):
+    prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
+
+if any(df is None for df in [prazos_df, audiencias_df, iniciais_df]):
+    st.stop()
+
+# Mostra informações sobre os dados carregados
+with st.expander("ℹ️ Informações sobre os dados carregados"):
     col1, col2, col3 = st.columns(3)
+    with col1:
+        st.write("**Prazos:**")
+        st.write(f"- Total de registros: {len(prazos_df)}")
+        st.write(f"- Colunas: {', '.join(prazos_df.columns)}")
+    with col2:
+        st.write("**Audiências:**")
+        st.write(f"- Total de registros: {len(audiencias_df)}")
+        st.write(f"- Colunas: {', '.join(audiencias_df.columns)}")
+    with col3:
+        st.write("**Iniciais:**")
+        st.write(f"- Total de registros: {len(iniciais_df)}")
+        st.write(f"- Colunas: {', '.join(iniciais_df.columns)}")
+
+# Seleção da visão
+st.sidebar.title("Filtros")
+view = st.sidebar.radio(
+    "Selecione a visão",
+    ["Dashboard Geral", "Prazos", "Audiências", "Processos Iniciais"]
+)
+
+# Dashboard Geral
+if view == "Dashboard Geral":
+    st.header("📊 Dashboard Geral")
     
+    # Métricas principais
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total de Prazos", len(prazos_df))
     with col2:
         st.metric("Total de Audiências", len(audiencias_df))
     with col3:
-        st.metric("Total de Processos Iniciais", len(iniciais_df))
+        st.metric("Total de Processos", len(iniciais_df))
     
-    # Gráficos da visão geral
+    # Gráficos gerais
     col1, col2 = st.columns(2)
     
     with col1:
-        # Distribuição de prazos por tipo
         if 'Tipo' in prazos_df.columns:
-            fig_tipos = px.pie(prazos_df, names='Tipo', title='Distribuição de Prazos por Tipo')
-            st.plotly_chart(fig_tipos, use_container_width=True)
+            fig = px.pie(prazos_df, names='Tipo', title='Distribuição de Tipos de Prazo')
+            st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        # Timeline de audiências
-        fig_timeline = px.timeline(audiencias_df, x_start='Data', y='Processo',
-                                 title='Timeline de Audiências')
-        st.plotly_chart(fig_timeline, use_container_width=True)
+        if 'Status' in iniciais_df.columns:
+            fig = px.bar(iniciais_df['Status'].value_counts(), title='Status dos Processos')
+            st.plotly_chart(fig, use_container_width=True)
 
 # Visão de Prazos
-elif selected_view == "Prazos":
-    st.header("Gestão de Prazos")
+elif view == "Prazos":
+    st.header("⏰ Gestão de Prazos")
     
-    # Filtros específicos para prazos
-    prazos_filtrados = filter_by_period(prazos_df, 'Data')
+    # Filtros
+    prazos_filtrados = filter_by_period(prazos_df)
     
     if 'Responsável' in prazos_df.columns:
-        responsavel = st.sidebar.multiselect(
+        responsaveis = st.sidebar.multiselect(
             "Filtrar por Responsável",
             options=sorted(prazos_df['Responsável'].unique())
         )
-        if responsavel:
-            prazos_filtrados = prazos_filtrados[prazos_filtrados['Responsável'].isin(responsavel)]
+        if responsaveis:
+            prazos_filtrados = prazos_filtrados[prazos_filtrados['Responsável'].isin(responsaveis)]
     
-    # Exibição dos prazos em tabela
-    st.dataframe(prazos_filtrados, use_container_width=True)
-    
-    # Gráficos de prazos
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if 'Status' in prazos_filtrados.columns:
-            fig_status = px.bar(prazos_filtrados['Status'].value_counts(), 
-                              title='Distribuição por Status')
-            st.plotly_chart(fig_status, use_container_width=True)
-    
-    with col2:
-        if 'Tipo' in prazos_filtrados.columns:
-            fig_tipo = px.pie(prazos_filtrados, names='Tipo', 
-                            title='Distribuição por Tipo de Prazo')
-            st.plotly_chart(fig_tipo, use_container_width=True)
+    # Exibição dos dados
+    st.dataframe(prazos_filtrados)
 
 # Visão de Audiências
-elif selected_view == "Audiências":
-    st.header("Gestão de Audiências")
+elif view == "Audiências":
+    st.header("👥 Gestão de Audiências")
     
-    # Filtros específicos para audiências
-    audiencias_filtradas = filter_by_period(audiencias_df, 'Data')
+    # Filtros
+    audiencias_filtradas = filter_by_period(audiencias_df)
     
     if 'Tipo' in audiencias_df.columns:
-        tipo_audiencia = st.sidebar.multiselect(
+        tipos = st.sidebar.multiselect(
             "Filtrar por Tipo de Audiência",
             options=sorted(audiencias_df['Tipo'].unique())
         )
-        if tipo_audiencia:
-            audiencias_filtradas = audiencias_filtradas[audiencias_filtradas['Tipo'].isin(tipo_audiencia)]
+        if tipos:
+            audiencias_filtradas = audiencias_filtradas[audiencias_filtradas['Tipo'].isin(tipos)]
     
-    # Exibição das audiências em tabela
-    st.dataframe(audiencias_filtradas, use_container_width=True)
+    # Exibição dos dados
+    st.dataframe(audiencias_filtradas)
     
     # Calendário de audiências
     if not audiencias_filtradas.empty:
-        fig_calendar = go.Figure(data=[go.Scatter(
-            x=audiencias_filtradas['Data'],
-            y=audiencias_filtradas['Processo'],
-            mode='markers+text',
-            text=audiencias_filtradas['Tipo'],
-            textposition='top center'
-        )])
-        fig_calendar.update_layout(title='Calendário de Audiências')
-        st.plotly_chart(fig_calendar, use_container_width=True)
+        fig = px.timeline(audiencias_filtradas, x_start='Data', y='Processo',
+                         title='Calendário de Audiências')
+        st.plotly_chart(fig, use_container_width=True)
 
-# Visão de Iniciais
-elif selected_view == "Iniciais":
-    st.header("Gestão de Processos Iniciais")
+# Visão de Processos Iniciais
+else:
+    st.header("📝 Gestão de Processos Iniciais")
     
-    # Filtros específicos para processos iniciais
+    # Filtros
     if 'Status' in iniciais_df.columns:
-        status_inicial = st.sidebar.multiselect(
+        status = st.sidebar.multiselect(
             "Filtrar por Status",
             options=sorted(iniciais_df['Status'].unique())
         )
-        if status_inicial:
-            iniciais_df = iniciais_df[iniciais_df['Status'].isin(status_inicial)]
+        if status:
+            iniciais_df = iniciais_df[iniciais_df['Status'].isin(status)]
     
-    # Métricas importantes
+    # Métricas
     col1, col2, col3 = st.columns(3)
-    
     with col1:
         st.metric("Total de Processos", len(iniciais_df))
     with col2:
         if 'Valor da Causa' in iniciais_df.columns:
             valor_total = iniciais_df['Valor da Causa'].sum()
-            st.metric("Valor Total das Causas", f"R$ {valor_total:,.2f}")
+            st.metric("Valor Total", f"R$ {valor_total:,.2f}")
     with col3:
         if 'Status' in iniciais_df.columns:
-            processos_ativos = len(iniciais_df[iniciais_df['Status'] == 'Ativo'])
-            st.metric("Processos Ativos", processos_ativos)
+            ativos = len(iniciais_df[iniciais_df['Status'] == 'Ativo'])
+            st.metric("Processos Ativos", ativos)
     
-    # Exibição dos processos em tabela
-    st.dataframe(iniciais_df, use_container_width=True)
-    
-    # Gráficos de análise
-    if 'Valor da Causa' in iniciais_df.columns and 'Data Distribuição' in iniciais_df.columns:
-        fig_evolucao = px.line(iniciais_df.sort_values('Data Distribuição'),
-                             x='Data Distribuição',
-                             y='Valor da Causa',
-                             title='Evolução do Valor das Causas ao Longo do Tempo')
-        st.plotly_chart(fig_evolucao, use_container_width=True)
+    # Exibição dos dados
+    st.dataframe(iniciais_df)
 
-# Adicionar CSS personalizado
+# Estilo personalizado
 st.markdown("""
     <style>
-        .stSelectbox {
-            margin-bottom: 20px;
-        }
         .stMetric {
             background-color: #f0f2f6;
             padding: 10px;
             border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
         }
-        .uploadedFile {
-            margin-bottom: 2rem;
+        .stDataFrame {
+            margin-top: 20px;
+        }
+        .stRadio > label {
+            font-weight: bold;
         }
     </style>
 """, unsafe_allow_html=True)
