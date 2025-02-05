@@ -8,14 +8,25 @@ def load_data(file):
     excel_file = pd.ExcelFile(file)
     available_sheets = excel_file.sheet_names
     
-    # Filtrar apenas as abas que existem no arquivo
-    valid_sheets = [sheet for sheet in expected_sheets if sheet in available_sheets]
+    # Exibir as abas disponíveis no arquivo
+    st.sidebar.write("📌 Abas disponíveis no arquivo:")
+    st.sidebar.write(available_sheets)
+    
+    # Ajustar para variações de nome
+    matched_sheets = {}
+    for sheet in expected_sheets:
+        for available_sheet in available_sheets:
+            if sheet.lower().strip() in available_sheet.lower().strip():
+                matched_sheets[sheet] = available_sheet
+                break
+    
+    valid_sheets = list(matched_sheets.values())
     
     if not valid_sheets:
         st.error("Nenhuma das abas esperadas ('Prazos', 'Audiência', 'Iniciais') foi encontrada no arquivo.")
         return None, None
     
-    data = {sheet: pd.read_excel(file, sheet_name=sheet) for sheet in valid_sheets}
+    data = {sheet: pd.read_excel(file, sheet_name=matched_sheets[sheet]) for sheet in matched_sheets}
     
     # Ajustar formatação de datas
     for sheet in data:
