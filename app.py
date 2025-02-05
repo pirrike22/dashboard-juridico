@@ -31,20 +31,27 @@ def load_data(file):
     
     # Ajustar formatação de datas e ordená-las corretamente
     for sheet in data:
-        for col in data[sheet].columns:
-            if "data" in col.lower() or data[sheet][col].dtype == 'datetime64[ns]':
-                data[sheet][col] = pd.to_datetime(data[sheet][col], errors='coerce')
-                data[sheet] = data[sheet].sort_values(by=[col], ascending=True)
-                
-                if sheet == "Audiência":
-                    data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y %H:%M')
-                else:
-                    data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
+        date_column = ""
+        if sheet == "Prazos":
+            date_column = "DATA (D-1)"
+        elif sheet == "Audiência":
+            date_column = "DATA"
+        elif sheet == "Iniciais":
+            date_column = "DATA"
+        
+        if date_column and date_column in data[sheet].columns:
+            data[sheet][date_column] = pd.to_datetime(data[sheet][date_column], errors='coerce')
+            data[sheet] = data[sheet].sort_values(by=[date_column], ascending=True)
+            
+            if sheet == "Audiência":
+                data[sheet][date_column] = data[sheet][date_column].dt.strftime('%d/%m/%Y %H:%M')
+            else:
+                data[sheet][date_column] = data[sheet][date_column].dt.strftime('%d/%m/%Y')
     
     return data, valid_sheets
 
 # Função para filtrar por período
-def filter_by_period(df):
+def filter_by_period(df, date_column):
     today = datetime.date.today()
     start_week = today - datetime.timedelta(days=today.weekday())
     end_week = start_week + datetime.timedelta(days=6)
@@ -52,11 +59,6 @@ def filter_by_period(df):
     next_week_end = next_week_start + datetime.timedelta(days=6)
     next_15_days = today + datetime.timedelta(days=15)
     
-    date_columns = [col for col in df.columns if "data" in col.lower()]
-    if not date_columns:
-        return df  # Retorna o DataFrame sem filtro se não encontrar colunas de data
-    
-    date_column = date_columns[0]
     df[date_column] = pd.to_datetime(df[date_column], errors='coerce', format='%d/%m/%Y')
     
     period_filter = st.sidebar.radio("Filtrar por período:", ["Todos", "Essa semana", "Semana seguinte", "Próximos 15 dias"], key=f"{date_column}_filter")
@@ -98,7 +100,16 @@ if uploaded_file:
             df = data[sheet]
             st.subheader(f"Visualização da Tabela - {sheet}")
             
-            df = filter_by_period(df)
+            date_column = ""
+            if sheet == "Prazos":
+                date_column = "DATA (D-1)"
+            elif sheet == "Audiência":
+                date_column = "DATA"
+            elif sheet == "Iniciais":
+                date_column = "DATA"
+            
+            if date_column and date_column in df.columns:
+                df = filter_by_period(df, date_column)
             
             st.dataframe(df)
             
@@ -119,20 +130,6 @@ if uploaded_file:
             # Exibir dados filtrados
             st.subheader("Dados Filtrados")
             st.dataframe(filtered_df)
-            
-            # Criar gráficos dinâmicos
-            numeric_columns = filtered_df.select_dtypes(include=['number']).columns.tolist()
-            if numeric_columns:
-                st.subheader("Gráficos Interativos")
-                x_axis = st.selectbox("Escolha a variável X", numeric_columns, key=f"{sheet}_x")
-                y_axis = st.selectbox("Escolha a variável Y", numeric_columns, key=f"{sheet}_y")
-                
-                fig, ax = plt.subplots()
-                ax.scatter(filtered_df[x_axis], filtered_df[y_axis])
-                ax.set_xlabel(x_axis)
-                ax.set_ylabel(y_axis)
-                ax.set_title(f"Relação entre {x_axis} e {y_axis} - {sheet}")
-                st.pyplot(fig)
             
             # Botão para exportar dados filtrados
             st.download_button(
