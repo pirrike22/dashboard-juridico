@@ -21,51 +21,51 @@ def load_data():
         # Carregar Prazos
         response = requests.get(URLS['prazos'])
         response.raise_for_status()
-        df_prazos = pd.read_csv(StringIO(response.text), encoding='utf-8')
-        # Debug prazos
-        st.write("Colunas originais de prazos:", df_prazos.columns.tolist())
-        st.write("Primeiras linhas de prazos:", df_prazos.head())
         
-        # Encontrar a coluna que contém 'DATA' no nome
-        data_col = next((col for col in df_prazos.columns if 'DATA' in str(col).upper()), None)
-        if data_col:
-            st.write(f"Coluna de data encontrada: {data_col}")
-            df_prazos['Data'] = pd.to_datetime(df_prazos[data_col], format='%d/%m/%Y', errors='coerce')
+        # Debug - mostrar conteúdo bruto
+        st.write("Conteúdo bruto dos prazos:")
+        st.text(response.text[:500])
+        
+        # Ler CSV ignorando linhas vazias
+        df_prazos = pd.read_csv(
+            StringIO(response.text),
+            encoding='utf-8',
+            skiprows=lambda x: x == 0,  # Pular primeira linha se estiver vazia
+            on_bad_lines='skip'  # Ignorar linhas problemáticas
+        )
+        
+        # Debug - mostrar DataFrame após leitura inicial
+        st.write("DataFrame após leitura inicial:")
+        st.write(df_prazos.head())
+        st.write("Colunas:", df_prazos.columns.tolist())
+        
+        # Remover colunas completamente vazias
+        df_prazos = df_prazos.dropna(axis=1, how='all')
+        
+        # Debug - mostrar DataFrame após remover colunas vazias
+        st.write("DataFrame após remover colunas vazias:")
+        st.write(df_prazos.head())
+        st.write("Colunas:", df_prazos.columns.tolist())
         
         # Carregar Audiências
         response = requests.get(URLS['audiencias'])
         response.raise_for_status()
         df_audiencias = pd.read_csv(StringIO(response.text), encoding='utf-8')
-        df_audiencias = df_audiencias.rename(columns={
-            'DATA': 'Data',
-            'HORÃRIO': 'Horario',
-            'RAZÃO SOCIAL': 'Cliente',
-            'TIPO DE AUDIÃNCIA': 'Tipo',
-            'VARA/TURMA': 'Vara',
-            'MATÃRIA': 'Materia',
-            'RESPONSÃVEL': 'Responsavel',
-            'NÂº DO PROCESSO': 'Processo'
-        })
-        df_audiencias['Data'] = pd.to_datetime(df_audiencias['Data'].str.replace('.', '/') + '/2024', 
-                                             format='%d/%m/%Y', errors='coerce')
+        
+        # Debug - mostrar estrutura de audiências
+        st.write("DataFrame de audiências:")
+        st.write(df_audiencias.head())
+        st.write("Colunas de audiências:", df_audiencias.columns.tolist())
         
         # Carregar Iniciais
         response = requests.get(URLS['iniciais'])
         response.raise_for_status()
         df_iniciais = pd.read_csv(StringIO(response.text), encoding='utf-8')
-        df_iniciais = df_iniciais.rename(columns={
-            'DATA': 'Data',
-            'MATÃRIA': 'Tipo_Acao',
-            'DISTRIBUÃDO': 'Status',
-            'RESPONSÃVEL': 'Responsavel',
-            'NÂº DO PROCESSO': 'Processo'
-        })
-        df_iniciais['Data'] = pd.to_datetime(df_iniciais['Data'], format='%d/%m/%y', errors='coerce')
         
-        # Remover linhas com datas ausentes
-        df_prazos = df_prazos.dropna(subset=['Data'])
-        df_audiencias = df_audiencias.dropna(subset=['Data'])
-        df_iniciais = df_iniciais.dropna(subset=['Data'])
+        # Debug - mostrar estrutura de iniciais
+        st.write("DataFrame de iniciais:")
+        st.write(df_iniciais.head())
+        st.write("Colunas de iniciais:", df_iniciais.columns.tolist())
         
         return df_prazos, df_audiencias, df_iniciais
         
