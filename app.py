@@ -15,43 +15,48 @@ URLS = {
     'iniciais': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJjDmlGNdybLnCLRZ1GpeJN8cuDWnGH59BiNJ2U0rklQR8BD3wQKbjgVFX0HvT7-Syk5cIJVzebrwk/pub?gid=1311683775&single=true&output=csv'
 }
 
+def debug_csv_content(name, response_text):
+    st.write(f"### Conteúdo bruto do CSV - {name}")
+    st.text(response_text[:500])  # Mostrar os primeiros 500 caracteres
+
 @st.cache_data(ttl=300)
 def load_data():
     try:
         dfs = {}
         
-        # Carregar Prazos
-        response = requests.get(URLS['prazos'])
-        response.raise_for_status()
-        df_prazos = pd.read_csv(StringIO(response.text))
-        # Identificar a coluna de data e converter
-        data_col = [col for col in df_prazos.columns if 'DATA' in col.upper()][0]
-        df_prazos['Data'] = pd.to_datetime(df_prazos[data_col], format='%d/%m/%y', errors='coerce')
-        dfs['prazos'] = df_prazos
+        # Tentar carregar cada planilha
+        for name, url in URLS.items():
+            st.write(f"Tentando carregar {name}...")
+            
+            # Fazer o request
+            response = requests.get(url)
+            response.raise_for_status()
+            
+            # Debug do conteúdo bruto
+            debug_csv_content(name, response.text)
+            
+            # Tentar diferentes encodings
+            encodings = ['utf-8', 'latin1', 'iso-8859-1', 'cp1252']
+            
+            for encoding in encodings:
+                try:
+                    st.write(f"Tentando encoding {encoding}...")
+                    df = pd.read_csv(StringIO(response.text), encoding=encoding)
+                    st.write(f"Sucesso com encoding {encoding}")
+                    st.write("Colunas encontradas:", df.columns.tolist())
+                    st.write("Primeiras linhas:")
+                    st.write(df.head())
+                    dfs[name] = df
+                    break
+                except Exception as e:
+                    st.write(f"Erro com encoding {encoding}: {str(e)}")
+                    continue
+            
+            if name not in dfs:
+                st.error(f"Não foi possível ler os dados de {name} com nenhum encoding")
+                dfs[name] = pd.DataFrame()
         
-        # Carregar Audiências
-        response = requests.get(URLS['audiencias'])
-        response.raise_for_status()
-        df_audiencias = pd.read_csv(StringIO(response.text))
-        df_audiencias['Data'] = pd.to_datetime(df_audiencias['DATA'], format='%d/%m/%y', errors='coerce')
-        df_audiencias = df_audiencias.rename(columns={
-            'TIPO DE AUDIÃNCIA': 'Tipo',
-            'VARA/TURMA': 'Vara'
-        })
-        dfs['audiencias'] = df_audiencias
-        
-        # Carregar Iniciais
-        response = requests.get(URLS['iniciais'])
-        response.raise_for_status()
-        df_iniciais = pd.read_csv(StringIO(response.text))
-        df_iniciais['Data'] = pd.to_datetime(df_iniciais['DATA'], format='%d/%m/%y', errors='coerce')
-        df_iniciais = df_iniciais.rename(columns={
-            'MATÃRIA': 'Tipo de Ação',
-            'DISTRIBUÃDO': 'Status'
-        })
-        dfs['iniciais'] = df_iniciais
-        
-        return dfs['prazos'], dfs['audiencias'], dfs['iniciais']
+        return dfs.get('prazos', pd.DataFrame()), dfs.get('audiencias', pd.DataFrame()), dfs.get('iniciais', pd.DataFrame())
         
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {str(e)}")
@@ -63,24 +68,6 @@ st.title("Dashboard Jurídico")
 
 # Carregar dados
 df_prazos, df_audiencias, df_iniciais = load_data()
-
-# Debug - Mostrar informações dos DataFrames
-st.write("### Debug - Estrutura dos Dados")
-
-st.write("#### Prazos")
-st.write("Colunas:", df_prazos.columns.tolist())
-st.write("Amostra dos dados:")
-st.write(df_prazos.head())
-
-st.write("#### Audiências")
-st.write("Colunas:", df_audiencias.columns.tolist())
-st.write("Amostra dos dados:")
-st.write(df_audiencias.head())
-
-st.write("#### Iniciais")
-st.write("Colunas:", df_iniciais.columns.tolist())
-st.write("Amostra dos dados:")
-st.write(df_iniciais.head())
 
 # Parar aqui para verificar os dados
 st.stop()
