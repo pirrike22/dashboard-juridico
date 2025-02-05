@@ -7,16 +7,18 @@ import numpy as np
 # Configuração inicial do Streamlit
 st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
 
-def limpar_dados(df):
-    """Limpa os dados do DataFrame, removendo linhas vazias e valores NaN."""
+def limpar_dataframe(df):
+    """Limpa o DataFrame removendo valores nulos e formatando corretamente."""
     if df is None or df.empty:
         return pd.DataFrame()
     
-    # Remover linhas onde todas as colunas são NaN
+    # Remove linhas completamente vazias
     df = df.dropna(how='all')
     
-    # Substituir NaN por strings vazias em colunas de texto
-    df = df.fillna('')
+    # Converte todas as colunas para string, exceto datas
+    for col in df.columns:
+        if df[col].dtype != 'datetime64[ns]':
+            df[col] = df[col].fillna('').astype(str)
     
     return df
 
@@ -30,17 +32,14 @@ def processar_aba(df, nome_aba):
     for idx, row in df.iterrows():
         row_str = row.astype(str).str.upper()
         
-        # Definir critérios de busca para cada aba
-        if nome_aba == 'Prazos' and row_str.str.contains('DATA').any():
+        # Critérios específicos para cada aba
+        if nome_aba == 'Prazos' and any('DATA' in str(cell).upper() for cell in row):
             header_row = idx
             break
-        elif nome_aba == 'Audiências' and (
-            row_str.str.contains('AUDIÊNCIA').any() or 
-            row_str.str.contains('AUDIENCIA').any()
-        ):
+        elif nome_aba == 'Audiências' and any('AUDIÊNCIA' in str(cell).upper() or 'AUDIENCIA' in str(cell).upper() for cell in row):
             header_row = idx
             break
-        elif nome_aba == 'Iniciais' and row_str.str.contains('DISTRIBUIÇÃO').any():
+        elif nome_aba == 'Iniciais' and any('DISTRIBUIÇÃO' in str(cell).upper() or 'DISTRIBUICAO' in str(cell).upper() for cell in row):
             header_row = idx
             break
     
@@ -50,8 +49,8 @@ def processar_aba(df, nome_aba):
         df = df.iloc[header_row + 1:].reset_index(drop=True)
         df.columns = headers
         
-        # Limpar os dados
-        df = limpar_dados(df)
+        # Limpar o DataFrame
+        df = limpar_dataframe(df)
         
         return df
     
@@ -61,43 +60,26 @@ def carregar_dados(arquivo):
     """Carrega todas as abas do arquivo Excel."""
     try:
         with st.spinner('Carregando dados...'):
-            # Ler todas as abas
-            try:
-                df_prazos = pd.read_excel(arquivo, sheet_name='Prazos', header=None)
-            except:
-                st.error("Erro ao ler aba Prazos")
-                df_prazos = pd.DataFrame()
+            # Carregar cada aba
+            excel_file = pd.ExcelFile(arquivo)
             
-            try:
-                df_audiencias = pd.read_excel(arquivo, sheet_name='Audiências', header=None)
-            except:
-                st.error("Erro ao ler aba Audiências")
-                df_audiencias = pd.DataFrame()
+            dados = {}
+            for nome_aba in ['Prazos', 'Audiências', 'Iniciais']:
+                try:
+                    df = pd.read_excel(excel_file, sheet_name=nome_aba, header=None)
+                    df_processado = processar_aba(df, nome_aba)
+                    dados[nome_aba] = df_processado
+                    
+                    # Debug: mostrar colunas encontradas
+                    if not df_processado.empty:
+                        st.write(f"Colunas encontradas na aba {nome_aba}:", 
+                               [str(col) for col in df_processado.columns])
+                except Exception as e:
+                    st.error(f"Erro ao processar aba {nome_aba}: {str(e)}")
+                    dados[nome_aba] = pd.DataFrame()
             
-            try:
-                df_iniciais = pd.read_excel(arquivo, sheet_name='Iniciais', header=None)
-            except:
-                st.error("Erro ao ler aba Iniciais")
-                df_iniciais = pd.DataFrame()
+            return dados
             
-            # Processar cada aba
-            prazos = processar_aba(df_prazos, 'Prazos')
-            audiencias = processar_aba(df_audiencias, 'Audiências')
-            iniciais = processar_aba(df_iniciais, 'Iniciais')
-            
-            # Debug: Mostrar as colunas encontradas
-            if not prazos.empty:
-                st.write("Colunas na aba Prazos:", list(prazos.columns))
-            if not audiencias.empty:
-                st.write("Colunas na aba Audiências:", list(audiencias.columns))
-            if not iniciais.empty:
-                st.write("Colunas na aba Iniciais:", list(iniciais.columns))
-            
-            return {
-                'Prazos': prazos,
-                'Audiências': audiencias,
-                'Iniciais': iniciais
-            }
     except Exception as e:
         st.error(f"Erro ao carregar arquivo: {str(e)}")
         return None
@@ -108,15 +90,23 @@ def encontrar_coluna_data(df, tipo_aba):
         return None
         
     padroes = {
-        'Prazos': ['DATA', 'D-1', 'PRAZO'],
-        'Audiências': ['DATA', 'AUDIÊNCIA', 'AUDIENCIA'],
-        'Iniciais': ['DATA', 'DISTRIBUIÇÃO', 'DISTRIBUICAO']
+        'Prazos': ['DATA (D-1)', 'DATA', 'PRAZO'],
+        'Audiências': ['DATA AUDIÊNCIA', 'AUDIENCIA', 'DATA'],
+        'Iniciais': ['DATA DISTRIBUIÇÃO', 'DISTRIBUICAO', 'DATA INICIAL', 'DATA']
     }
     
+    # Primeiro, tenta encontrar correspondência exata
     for col in df.columns:
-        col_upper = str(col).upper()
-        if any(padrao in col_upper for padrao in padroes.get(tipo_aba, [])):
+        col_str = str(col).upper()
+        if col_str in [p.upper() for p in padroes[tipo_aba]]:
             return col
+    
+    # Se não encontrar, procura por correspondência parcial
+    for col in df.columns:
+        col_str = str(col).upper()
+        if any(padrao.upper() in col_str for padrao in padroes[tipo_aba]):
+            return col
+    
     return None
 
 def filtrar_dados(df, coluna_data, periodo):
@@ -124,12 +114,19 @@ def filtrar_dados(df, coluna_data, periodo):
     if df.empty or coluna_data not in df.columns:
         return df
     
-    # Converter coluna para datetime
-    df[coluna_data] = pd.to_datetime(df[coluna_data], errors='coerce')
+    # Converter coluna para datetime de forma segura
+    try:
+        df[coluna_data] = pd.to_datetime(df[coluna_data], errors='coerce')
+    except:
+        st.error(f"Erro ao converter datas da coluna {coluna_data}")
+        return df
     
     hoje = pd.Timestamp.now()
     inicio_semana = hoje - timedelta(days=hoje.weekday())
     fim_semana = inicio_semana + timedelta(days=6)
+    
+    # Remover linhas com datas inválidas
+    df = df[df[coluna_data].notna()]
     
     if periodo == 'Esta semana':
         return df[(df[coluna_data] >= inicio_semana) & (df[coluna_data] <= fim_semana)]
@@ -150,10 +147,10 @@ def exibir_aba(dados, nome_aba, periodo, filtros_adicionais):
     coluna_data = encontrar_coluna_data(dados[nome_aba], nome_aba)
     if not coluna_data:
         st.error(f"Não foi possível identificar a coluna de data na aba {nome_aba}")
-        st.write("Colunas disponíveis:", list(dados[nome_aba].columns))
+        st.write("Colunas disponíveis:", [str(col) for col in dados[nome_aba].columns])
         return
     
-    df_filtrado = filtrar_dados(dados[nome_aba], coluna_data, periodo)
+    df_filtrado = filtrar_dados(dados[nome_aba].copy(), coluna_data, periodo)
     
     # Aplicar filtros adicionais
     hoje = pd.Timestamp.now()
@@ -163,6 +160,9 @@ def exibir_aba(dados, nome_aba, periodo, filtros_adicionais):
         df_filtrado = df_filtrado[df_filtrado[coluna_data] < hoje]
     if 'Ordenar por data' in filtros_adicionais:
         df_filtrado = df_filtrado.sort_values(coluna_data)
+    
+    # Garantir que todos os dados estão limpos antes de exibir
+    df_filtrado = limpar_dataframe(df_filtrado)
     
     # Métricas
     col1, col2, col3 = st.columns(3)
@@ -177,17 +177,21 @@ def exibir_aba(dados, nome_aba, periodo, filtros_adicionais):
     
     # Exibir tabela
     if not df_filtrado.empty:
-        # Garantir que não há valores NaN antes de exibir
-        df_display = df_filtrado.fillna('')
-        st.dataframe(
-            df_display,
-            column_config={
-                coluna_data: st.column_config.DateColumn(
-                    "Data",
-                    format="DD/MM/YYYY"
-                )
-            }
-        )
+        try:
+            st.dataframe(
+                df_filtrado,
+                column_config={
+                    coluna_data: st.column_config.DateColumn(
+                        "Data",
+                        format="DD/MM/YYYY"
+                    )
+                },
+                hide_index=True
+            )
+        except Exception as e:
+            st.error(f"Erro ao exibir tabela: {str(e)}")
+            st.write("Tentando exibir sem configuração especial de coluna...")
+            st.dataframe(df_filtrado, hide_index=True)
     else:
         st.info(f"Nenhum registro encontrado em {nome_aba} para os filtros selecionados.")
 
