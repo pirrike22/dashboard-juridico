@@ -4,15 +4,25 @@ import matplotlib.pyplot as plt
 
 # Função para carregar dados
 def load_data(file):
-    selected_sheets = ["Prazos", "Audiência", "Iniciais"]
-    data = {sheet: pd.read_excel(file, sheet_name=sheet) for sheet in selected_sheets}
+    expected_sheets = ["Prazos", "Audiência", "Iniciais"]
+    excel_file = pd.ExcelFile(file)
+    available_sheets = excel_file.sheet_names
+    
+    # Filtrar apenas as abas que existem no arquivo
+    valid_sheets = [sheet for sheet in expected_sheets if sheet in available_sheets]
+    
+    if not valid_sheets:
+        st.error("Nenhuma das abas esperadas ('Prazos', 'Audiência', 'Iniciais') foi encontrada no arquivo.")
+        return None, None
+    
+    data = {sheet: pd.read_excel(file, sheet_name=sheet) for sheet in valid_sheets}
     
     # Ajustar formatação de datas
     for sheet in data:
         for col in data[sheet].select_dtypes(include=['datetime']):
             data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
     
-    return data, selected_sheets
+    return data, valid_sheets
 
 # Configuração do Streamlit
 st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
@@ -23,9 +33,13 @@ uploaded_file = st.file_uploader("Carregue a planilha Excel", type=["xlsx"])
 
 if uploaded_file:
     data, sheets = load_data(uploaded_file)
+    
+    if data is None:
+        st.stop()
+    
     st.success("Dados carregados com sucesso!")
     
-    # Criar abas para cada planilha
+    # Criar abas para cada planilha disponível
     tab_names = st.tabs(sheets)
     
     for i, sheet in enumerate(sheets):
@@ -73,5 +87,3 @@ if uploaded_file:
                 file_name=f"dados_filtrados_{sheet}.csv",
                 mime="text/csv"
             )
-
-
