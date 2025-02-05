@@ -13,7 +13,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Função para identificar a coluna de data em um DataFrame
 def find_date_column(df):
     """
     Identifica a coluna que contém datas no DataFrame.
@@ -53,6 +52,9 @@ def load_data(uploaded_file):
         # Leitura inicial do arquivo
         excel_file = io.BytesIO(uploaded_file.getvalue())
         
+        # Lista de abas necessárias
+        required_sheets = ['prazos', 'audiências', 'audiencias', 'iniciais']
+        
         # Tenta ler todas as abas do arquivo
         with pd.ExcelFile(excel_file) as xls:
             sheet_names = xls.sheet_names
@@ -60,38 +62,25 @@ def load_data(uploaded_file):
             # Dicionário para armazenar os DataFrames
             dfs = {}
             
-            # Tenta carregar cada aba
+            # Tenta carregar cada aba necessária
             for sheet in sheet_names:
-                try:
-                    df = pd.read_excel(xls, sheet)
-                    date_col, df = find_date_column(df)
-                    
-                    if date_col:
-                        # Padroniza o nome da coluna de data
-                        df = df.rename(columns={date_col: 'Data'})
-                        dfs[sheet.lower()] = df
-                    else:
-                        st.warning(f"Não foi possível identificar a coluna de data na aba {sheet}")
-                except Exception as e:
-                    st.error(f"Erro ao processar a aba {sheet}: {str(e)}")
-            
-            # Verifica se encontrou as abas necessárias
-            required_sheets = ['prazos', 'audiências', 'audiencias', 'iniciais']
-            found_sheets = [sheet.lower() for sheet in dfs.keys()]
-            
-            prazos_df = None
-            audiencias_df = None
-            iniciais_df = None
+                sheet_lower = sheet.lower()
+                if sheet_lower in required_sheets:
+                    try:
+                        df = pd.read_excel(xls, sheet)
+                        date_col, df = find_date_column(df)
+                        
+                        if date_col:
+                            # Padroniza o nome da coluna de data
+                            df = df.rename(columns={date_col: 'Data'})
+                            dfs[sheet_lower] = df
+                    except Exception as e:
+                        st.error(f"Erro ao processar a aba {sheet}: {str(e)}")
             
             # Atribui os DataFrames encontrados
-            if 'prazos' in found_sheets:
-                prazos_df = dfs['prazos']
-            
-            if 'audiências' in found_sheets or 'audiencias' in found_sheets:
-                audiencias_df = next((dfs[k] for k in found_sheets if k in ['audiências', 'audiencias']), None)
-            
-            if 'iniciais' in found_sheets:
-                iniciais_df = dfs['iniciais']
+            prazos_df = dfs.get('prazos')
+            audiencias_df = dfs.get('audiências') or dfs.get('audiencias')
+            iniciais_df = dfs.get('iniciais')
             
             # Verifica se todos os DataFrames necessários foram encontrados
             if not all([prazos_df is not None, audiencias_df is not None, iniciais_df is not None]):
@@ -108,7 +97,6 @@ def load_data(uploaded_file):
         st.error(f"Erro ao processar o arquivo: {str(e)}")
         return None, None, None
 
-# Função para filtrar dados por período
 def filter_by_period(df):
     periodo = st.sidebar.selectbox(
         "Filtrar por período",
@@ -218,7 +206,7 @@ elif view == "Prazos":
             prazos_filtrados = prazos_filtrados[prazos_filtrados['Responsável'].isin(responsaveis)]
     
     # Exibição dos dados
-    st.dataframe(prazos_filtrados)
+    st.dataframe(prazos_filtrados, hide_index=True)
 
 # Visão de Audiências
 elif view == "Audiências":
@@ -235,18 +223,40 @@ elif view == "Audiências":
         if tipos:
             audiencias_filtradas = audiencias_filtradas[audiencias_filtradas['Tipo'].isin(tipos)]
     
-    # Exibição dos dados
-    st.dataframe(audiencias_filtradas)
+    # Formatação das colunas de data e horário
+    audiencias_display = audiencias_filtradas.copy()
+    
+    # Formatar a coluna de data para dd/mm/aaaa
+    audiencias_display['Data'] = audiencias_display['Data'].dt.strftime('%d/%m/%Y')
+    
+    # Formatar a coluna de horário se existir (removendo segundos)
+    if 'Horário' in audiencias_display.columns:
+        audiencias_display['Horário'] = pd.to_datetime(audiencias_display['Horário'], format='mixed', errors='coerce').dt.strftime('%H:%M')
+    
+    # Exibição dos dados formatados
+    st.dataframe(
+        audiencias_display,
+        hide_index=True,
+        column_config={
+            "Data": st.column_config.TextColumn("Data", width="medium"),
+            "Horário": st.column_config.TextColumn("Horário", width="small")
+        }
+    )
     
     # Calendário de audiências
     if not audiencias_filtradas.empty:
+        # Verificar e usar o nome correto da coluna para processos
+        processo_column = next((col for col in audiencias_filtradas.columns 
+                              if col.lower() in ['processo', 'nº processo', 'numero processo', 'núm. processo']), 
+                             audiencias_filtradas.columns[0])  # Usa primeira coluna se não encontrar
+        
         # Criar figura base
         fig = go.Figure()
         
         # Adicionar as audiências como pontos
         fig.add_trace(go.Scatter(
             x=audiencias_filtradas['Data'],
-            y=audiencias_filtradas['Processo'],
+            y=audiencias_filtradas[processo_column],
             mode='markers+text',
             marker=dict(size=12, symbol='circle'),
             text=audiencias_filtradas['Tipo'] if 'Tipo' in audiencias_filtradas.columns else None,
@@ -258,7 +268,7 @@ elif view == "Audiências":
             title='Calendário de Audiências',
             xaxis_title='Data',
             yaxis_title='Processo',
-            height=max(400, len(audiencias_filtradas) * 30),  # Ajusta altura baseado no número de audiências
+            height=max(400, len(audiencias_filtradas) * 30),
             showlegend=False,
             xaxis=dict(
                 type='date',
@@ -267,19 +277,6 @@ elif view == "Audiências":
         )
         
         st.plotly_chart(fig, use_container_width=True)
-        
-        # Adicionar tabela com detalhes
-        st.subheader("Detalhes das Audiências")
-        st.dataframe(
-            audiencias_filtradas.sort_values('Data'),
-            column_config={
-                "Data": st.column_config.DatetimeColumn(
-                    "Data",
-                    format="DD/MM/YYYY",
-                ),
-            },
-            hide_index=True,
-        )
 
 # Visão de Processos Iniciais
 else:
@@ -308,7 +305,7 @@ else:
             st.metric("Processos Ativos", ativos)
     
     # Exibição dos dados
-    st.dataframe(iniciais_df)
+    st.dataframe(iniciais_df, hide_index=True)
 
 # Estilo personalizado
 st.markdown("""
