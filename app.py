@@ -1,120 +1,186 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import plotly.express as px
-import plotly.graph_objects as go
-import requests
-from io import StringIO
 
-st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
+# Configuração inicial
+st.set_page_config(page_title="Gestão Jurídica", layout="wide")
 
-# URLs das planilhas publicadas
-URLS = {
-    'prazos': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJjDmlGNdybLnCLRZ1GpeJN8cuDWnGH59BiNJ2U0rklQR8BD3wQKbjgVFX0HvT7-Syk5cIJVzebrwk/pub?gid=1719876081&single=true&output=csv',
-    'audiencias': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJjDmlGNdybLnCLRZ1GpeJN8cuDWnGH59BiNJ2U0rklQR8BD3wQKbjgVFX0HvT7-Syk5cIJVzebrwk/pub?gid=1604483895&single=true&output=csv',
-    'iniciais': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJjDmlGNdybLnCLRZ1GpeJN8cuDWnGH59BiNJ2U0rklQR8BD3wQKbjgVFX0HvT7-Syk5cIJVzebrwk/pub?gid=1311683775&single=true&output=csv'
-}
+# URLs das abas publicadas
+URL_PRAZOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJjDmlGNdybLnCLRZ1GpeJN8cuDWnGH59BiNJ2U0rklQR8BD3wQKbjgVFX0HvT7-Syk5cIJVzebrwk/pub?gid=1719876081&single=true&output=csv"
+URL_AUDIENCIAS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJjDmlGNdybLnCLRZ1GpeJN8cuDWnGH59BiNJ2U0rklQR8BD3wQKbjgVFX0HvT7-Syk5cIJVzebrwk/pub?gid=1604483895&single=true&output=csv"
+URL_INICIAIS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTJjDmlGNdybLnCLRZ1GpeJN8cuDWnGH59BiNJ2U0rklQR8BD3wQKbjgVFX0HvT7-Syk5cIJVzebrwk/pub?gid=1311683775&single=true&output=csv"
 
-def converter_data(data_str):
-    """Converte string de data para datetime."""
-    if pd.isna(data_str):
-        return None
+# Função para carregar dados
+@st.cache_data(ttl=600)
+def load_data(url):
+    df = pd.read_csv(url)
     
-    try:
-        data_str = str(data_str).strip()
-        if 'nov' in data_str.lower():
-            data_str = data_str.lower().replace('nov.', '11')
-            return pd.to_datetime(data_str + '/2024', format='%d/%m/%Y')
-        elif '/' in data_str:
-            if len(data_str.split('/')[2]) == 2:  # Formato dd/mm/yy
-                return pd.to_datetime(data_str, format='%d/%m/%y')
-            return pd.to_datetime(data_str, format='%d/%m/%Y')
-    except:
-        return None
-    return None
+    # Detectar automaticamente colunas de data (ajuste conforme necessário)
+    date_columns = [col for col in df.columns if 'data' in col.lower() or 'prazo' in col.lower()]
+    
+    for col in date_columns:
+        try:
+            df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
+        except:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+    
+    return df
 
-@st.cache_data(ttl=300)
-def load_data():
-    try:
-        # Carregar e processar Prazos
-        response = requests.get(URLS['prazos'])
-        response.raise_for_status()
-        df_prazos = pd.read_csv(StringIO(response.text), encoding='latin1', skiprows=lambda x: x == 0)
-        df_prazos = df_prazos.dropna(axis=1, how='all')
-        
-        # Renomear colunas de Prazos
-        df_prazos.columns = [
-            'data', 'cliente', 'processo', 'tarefa', 'responsavel',
-            'data_ciencia', 'data_delegacao', 'prazo_interno',
-            'data_entrega', 'complexidade', 'pronto_protocolo',
-            'protocolado'
-        ]
-        
-        # Carregar e processar Audiências
-        response = requests.get(URLS['audiencias'])
-        response.raise_for_status()
-        df_audiencias = pd.read_csv(StringIO(response.text), encoding='latin1')
-        
-        # Renomear colunas de Audiências - usar índices das colunas para evitar problemas com caracteres especiais
-        df_audiencias.columns = [
-            'data', 'horario', 'cliente', 'cliente_avisado', 'lembrete_enviado',
-            'testemunha', 'na_agenda', 'responsavel', 'processo', 'vara',
-            'tipo', 'materia', 'parte_adversa', 'observacoes'
-        ]
-        
-        # Carregar e processar Iniciais
-        response = requests.get(URLS['iniciais'])
-        response.raise_for_status()
-        df_iniciais = pd.read_csv(StringIO(response.text), encoding='latin1')
-        
-        # Renomear colunas de Iniciais - usar índices das colunas para evitar problemas com caracteres especiais
-        df_iniciais.columns = [
-            'data', 'cliente', 'documento', 'tipo_acao', 'observacoes',
-            'responsavel', 'data_entrega', 'liberado_protocolo', 'status',
-            'protocolado', 'data_protocolo', 'processo'
-        ]
-        
-        # Converter datas em todos os DataFrames
-        for df in [df_prazos, df_audiencias, df_iniciais]:
-            date_columns = [col for col in df.columns if 'data' in col]
-            for col in date_columns:
-                df[col] = df[col].apply(converter_data)
-        
-        # Remover linhas com datas ausentes na coluna principal de data
-        df_prazos = df_prazos.dropna(subset=['data'])
-        df_audiencias = df_audiencias.dropna(subset=['data'])
-        df_iniciais = df_iniciais.dropna(subset=['data'])
-        
-        return df_prazos, df_audiencias, df_iniciais
-        
-    except Exception as e:
-        st.error(f"Erro ao carregar os dados: {str(e)}")
-        st.write("Detalhes completos do erro:", str(e))
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+# Carregar todos os dados
+df_prazos = load_data(URL_PRAZOS)
+df_audiencias = load_data(URL_AUDIENCIAS)
+df_iniciais = load_data(URL_INICIAIS)
 
-# Título do Dashboard
-st.title("Dashboard Jurídico")
+# Sidebar - Filtros temporais
+st.sidebar.header("Filtros Temporais")
+today = datetime.today().normalize()
 
-# Carregar dados
-df_prazos, df_audiencias, df_iniciais = load_data()
+# Função para filtro de datas
+def date_filter(df, date_column, days):
+    if date_column in df.columns:
+        end_date = today + timedelta(days=days)
+        return df[(df[date_column] >= today) & (df[date_column] <= end_date)]
+    return df
 
-# Debug - Mostrar informações dos DataFrames processados
-st.write("### Dados Processados")
+# Seleção de período
+periodo = st.sidebar.selectbox(
+    "Selecione o período para Prazos e Audiências:",
+    ["Esta Semana (7 dias)", "Próxima Semana (14 dias)", "Próximos 15 dias"],
+    index=0
+)
 
-st.write("#### Prazos")
-st.write("Colunas:", df_prazos.columns.tolist())
-st.write("Primeiras linhas:")
-st.write(df_prazos.head())
+# Mapeamento de dias
+days = 7 if "7" in periodo else 14 if "14" in periodo else 15
 
-st.write("#### Audiências")
-st.write("Colunas:", df_audiencias.columns.tolist())
-st.write("Primeiras linhas:")
-st.write(df_audiencias.head())
+# Layout principal
+st.title("Dashboard Gestão Jurídica")
 
-st.write("#### Iniciais")
-st.write("Colunas:", df_iniciais.columns.tolist())
-st.write("Primeiras linhas:")
-st.write(df_iniciais.head())
+# Abas principais
+tab1, tab2, tab3 = st.tabs(["🗓️ Prazos Processuais", "👨⚖️ Audiências", "📁 Processos Iniciais"])
 
-# Parar aqui para verificar os dados processados
-st.stop()
+with tab1:
+    st.header("Controle de Prazos Processuais")
+    
+    # Aplicar filtro
+    filtered_prazos = date_filter(df_prazos, 'Prazo', days)  # Ajustar nome da coluna
+    
+    # Filtros adicionais
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        status = st.multiselect(
+            "Status do Prazo",
+            options=filtered_prazos['Status'].unique(),
+            default=filtered_prazos['Status'].unique()
+        )
+    with col2:
+        responsaveis = st.multiselect(
+            "Responsáveis",
+            options=filtered_prazos['Responsável'].unique(),
+            default=filtered_prazos['Responsável'].unique()
+        )
+    with col3:
+        tipos = st.multiselect(
+            "Tipo de Prazo",
+            options=filtered_prazos['Tipo'].unique(),
+            default=filtered_prazos['Tipo'].unique()
+        )
+    
+    # Aplicar filtros
+    filtered_prazos = filtered_prazos[
+        filtered_prazos['Status'].isin(status) &
+        filtered_prazos['Responsável'].isin(responsaveis) &
+        filtered_prazos['Tipo'].isin(tipos)
+    ]
+    
+    # Exibir dados
+    st.dataframe(
+        filtered_prazos.style.highlight_between(
+            subset='Prazo', 
+            left=today, 
+            right=today+timedelta(days=3),
+            color='#ff9999'
+        ),
+        use_container_width=True,
+        height=600
+    )
+
+with tab2:
+    st.header("Agenda de Audiências")
+    
+    # Aplicar filtro
+    filtered_audiencias = date_filter(df_audiencias, 'Data', days)  # Ajustar nome da coluna
+    
+    # Filtros rápidos
+    col1, col2 = st.columns(2)
+    with col1:
+        tribunal = st.multiselect(
+            "Tribunal",
+            options=filtered_audiencias['Tribunal'].unique(),
+            default=filtered_audiencias['Tribunal'].unique()
+        )
+    with col2:
+        status_aud = st.multiselect(
+            "Status da Audiência",
+            options=filtered_audiencias['Status'].unique(),
+            default=filtered_audiencias['Status'].unique()
+        )
+    
+    # Aplicar filtros
+    filtered_audiencias = filtered_audiencias[
+        filtered_audiencias['Tribunal'].isin(tribunal) &
+        filtered_audiencias['Status'].isin(status_aud)
+    ]
+    
+    # Visualização em calendário
+    if not filtered_audiencias.empty:
+        st.subheader("Linha do Tempo")
+        timeline_data = filtered_audiencias[['Data', 'Processo', 'Horário']].sort_values('Data')
+        st.write(timeline_data.set_index('Data'))
+    else:
+        st.warning("Nenhuma audiência encontrada para o período selecionado")
+
+with tab3:
+    st.header("Processos Iniciais")
+    
+    # Filtros estáticos
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        clientes = st.multiselect(
+            "Clientes",
+            options=df_iniciais['Cliente'].unique(),
+            default=df_iniciais['Cliente'].unique()
+        )
+    with col2:
+        areas = st.multiselect(
+            "Área Jurídica",
+            options=df_iniciais['Área'].unique(),
+            default=df_iniciais['Área'].unique()
+        )
+    with col3:
+        status_inic = st.multiselect(
+            "Status do Processo",
+            options=df_iniciais['Status'].unique(),
+            default=df_iniciais['Status'].unique()
+        )
+    
+    # Aplicar filtros
+    filtered_iniciais = df_iniciais[
+        df_iniciais['Cliente'].isin(clientes) &
+        df_iniciais['Área'].isin(areas) &
+        df_iniciais['Status'].isin(status_inic)
+    ]
+    
+    # Métricas
+    st.subheader("Estatísticas")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Processos", len(filtered_iniciais))
+    col2.metric("Ativos", len(filtered_iniciais[filtered_iniciais['Status'] == 'Ativo']))
+    col3.metric("Urgentes", len(filtered_iniciais[filtered_iniciais['Prioridade'] == 'Alta']))
+    col4.metric("Em Atraso", len(filtered_iniciais[filtered_iniciais['Prazo'] < today]))
+    
+    # Exibir dados
+    st.dataframe(filtered_iniciais, use_container_width=True)
+
+# Rodapé
+st.markdown("---")
+st.caption("Dados atualizados automaticamente da planilha pública - Atualizado em " + datetime.now().strftime("%d/%m/%Y %H:%M"))
