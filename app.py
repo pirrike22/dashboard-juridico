@@ -50,7 +50,7 @@ def load_data(file):
     
     return data, valid_sheets
 
-# Função para filtrar por período
+# Função para filtrar por período e remover prazos da semana anterior
 def filter_by_period(df, date_column):
     today = datetime.date.today()
     start_week = today - datetime.timedelta(days=today.weekday())
@@ -58,8 +58,12 @@ def filter_by_period(df, date_column):
     next_week_start = end_week + datetime.timedelta(days=1)
     next_week_end = next_week_start + datetime.timedelta(days=6)
     next_15_days = today + datetime.timedelta(days=15)
+    last_week_start = start_week - datetime.timedelta(days=7)
     
     df[date_column] = pd.to_datetime(df[date_column], errors='coerce', format='%d/%m/%Y')
+    
+    # Remover prazos da semana anterior
+    df = df[df[date_column] >= pd.to_datetime(start_week)]
     
     period_filter = st.sidebar.radio("Filtrar por período:", ["Todos", "Essa semana", "Semana seguinte", "Próximos 15 dias"], key=f"{date_column}_filter")
     
@@ -110,6 +114,7 @@ if uploaded_file:
             
             if date_column and date_column in df.columns:
                 df = filter_by_period(df, date_column)
+                df = df.set_index(date_column)
             
             st.dataframe(df)
             
@@ -134,7 +139,7 @@ if uploaded_file:
             # Botão para exportar dados filtrados
             st.download_button(
                 label="Baixar dados filtrados",
-                data=filtered_df.to_csv(index=False),
+                data=filtered_df.to_csv(index=True),
                 file_name=f"dados_filtrados_{sheet}.csv",
                 mime="text/csv"
             )
