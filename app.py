@@ -22,15 +22,15 @@ def load_data():
         response = requests.get(URLS['prazos'])
         response.raise_for_status()
         df_prazos = pd.read_csv(StringIO(response.text), encoding='utf-8')
-        # Remover colunas vazias e renomear
-        df_prazos = df_prazos.iloc[:, 12:]  # Começar da coluna 'DATA (D-1)'
-        df_prazos.columns = ['Data', 'Cliente', 'Processo', 'Tarefa', 'Responsavel', 'Data_Ciencia', 
-                            'Data_Delegacao', 'Prazo_Interno', 'Data_Entrega', 'Complexidade', 
-                            'Pronto_Protocolo', 'Protocolado']
-        # Converter datas
-        date_columns = ['Data', 'Data_Ciencia', 'Data_Delegacao', 'Prazo_Interno', 'Data_Entrega']
-        for col in date_columns:
-            df_prazos[col] = pd.to_datetime(df_prazos[col], format='%d/%m/%Y', errors='coerce')
+        # Debug prazos
+        st.write("Colunas originais de prazos:", df_prazos.columns.tolist())
+        st.write("Primeiras linhas de prazos:", df_prazos.head())
+        
+        # Encontrar a coluna que contém 'DATA' no nome
+        data_col = next((col for col in df_prazos.columns if 'DATA' in str(col).upper()), None)
+        if data_col:
+            st.write(f"Coluna de data encontrada: {data_col}")
+            df_prazos['Data'] = pd.to_datetime(df_prazos[data_col], format='%d/%m/%Y', errors='coerce')
         
         # Carregar Audiências
         response = requests.get(URLS['audiencias'])
@@ -77,31 +77,8 @@ def load_data():
 # Título do Dashboard
 st.title("Dashboard Jurídico")
 
-# Carregar dados
+# Carregar dados e mostrar debug
 df_prazos, df_audiencias, df_iniciais = load_data()
 
-# Verificar se os dados foram carregados
-if df_prazos.empty or df_audiencias.empty or df_iniciais.empty:
-    st.error("Erro ao carregar os dados. Por favor, verifique os logs acima.")
-    st.stop()
-
-# Debug - Mostrar informações dos DataFrames processados
-st.write("### Dados Processados")
-
-st.write("#### Prazos")
-st.write("Colunas:", df_prazos.columns.tolist())
-st.write("Amostra:")
-st.write(df_prazos.head())
-
-st.write("#### Audiências")
-st.write("Colunas:", df_audiencias.columns.tolist())
-st.write("Amostra:")
-st.write(df_audiencias.head())
-
-st.write("#### Iniciais")
-st.write("Colunas:", df_iniciais.columns.tolist())
-st.write("Amostra:")
-st.write(df_iniciais.head())
-
-# Parar aqui para verificar os dados processados
+# Parar aqui para verificar os dados
 st.stop()
