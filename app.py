@@ -44,7 +44,7 @@ def load_data(file):
     return data, valid_sheets
 
 # Função para filtrar por período
-def filter_by_period(df, date_column):
+def filter_by_period(df):
     today = datetime.date.today()
     start_week = today - datetime.timedelta(days=today.weekday())
     end_week = start_week + datetime.timedelta(days=6)
@@ -52,6 +52,11 @@ def filter_by_period(df, date_column):
     next_week_end = next_week_start + datetime.timedelta(days=6)
     next_15_days = today + datetime.timedelta(days=15)
     
+    date_columns = [col for col in df.columns if "data" in col.lower()]
+    if not date_columns:
+        return df  # Retorna o DataFrame sem filtro se não encontrar colunas de data
+    
+    date_column = date_columns[0]
     df[date_column] = pd.to_datetime(df[date_column], errors='coerce', format='%d/%m/%Y')
     
     period_filter = st.sidebar.radio("Filtrar por período:", ["Todos", "Essa semana", "Semana seguinte", "Próximos 15 dias"], key=f"{date_column}_filter")
@@ -93,8 +98,7 @@ if uploaded_file:
             df = data[sheet]
             st.subheader(f"Visualização da Tabela - {sheet}")
             
-            date_column = [col for col in df.columns if "data" in col.lower()][0]
-            df = filter_by_period(df, date_column)
+            df = filter_by_period(df)
             
             st.dataframe(df)
             
