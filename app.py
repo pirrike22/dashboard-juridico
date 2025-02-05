@@ -5,144 +5,104 @@ import locale
 import plotly.express as px
 import numpy as np
 
-# Configurando o locale para português
-try:
-    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-except:
-    try:
-        locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil.1252')
-    except:
-        pass
-
 # Configuração inicial do Streamlit
 st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
 
-# Dicionário de mapeamento de colunas
-COLUNAS_MAPEADAS = {
-    'data': ['DATA (D-1)', 'data', 'Data', 'DATA', 'data_prazo', 'data_audiencia', 'data_audiência', 'data_distribuicao'],
-    'responsavel': ['RESPONSÁVEL', 'Responsável', 'responsavel', 'RESPONSAVEL', 'advogado'],
-    'tipo': ['TIPO', 'Tipo', 'tipo', 'tipo_processo', 'TIPO PROCESSO'],
-    'valor': ['VALOR', 'Valor', 'valor', 'valor_causa', 'VALOR DA CAUSA'],
-    'cliente': ['CLIENTE', 'Cliente', 'cliente', 'PARTE', 'parte'],
-    'status': ['STATUS', 'Status', 'status', 'SITUAÇÃO', 'situacao'],
-    'complexidade': ['COMPLEXIDADE', 'Complexidade', 'complexidade', 'DIFICULDADE']
-}
-
-def encontrar_coluna(df, tipo_coluna):
-    """Encontra a coluna correta baseada no mapeamento."""
-    possiveis_nomes = COLUNAS_MAPEADAS.get(tipo_coluna, [])
-    for nome in possiveis_nomes:
-        if nome in df.columns:
-            return nome
+def identificar_coluna_data(df):
+    """Identifica a coluna de data no DataFrame."""
+    # Lista de possíveis nomes de coluna de data
+    possiveis_nomes = [
+        'DATA (D-1)',
+        'DATA(D-1)',
+        'DATA D-1',
+        'DATA',
+        'Data',
+        'data'
+    ]
+    
+    # Primeiro, procura pelo nome exato
+    for col in df.columns:
+        if any(nome.upper() == str(col).upper().strip() for nome in possiveis_nomes):
+            return col
+    
+    # Se não encontrar, procura por colunas que contenham 'DATA'
+    for col in df.columns:
+        if 'DATA' in str(col).upper():
+            return col
+    
     return None
 
 def carregar_dados(arquivo):
-    """Carrega os dados do arquivo Excel com tratamento de erros."""
+    """Carrega os dados do arquivo Excel com tratamento de erros aprimorado."""
     try:
         with st.spinner('Carregando dados...'):
-            excel_file = pd.ExcelFile(arquivo)
+            # Carregar todas as abas
+            todas_abas = pd.read_excel(arquivo, sheet_name=None)
+            
+            # Debug: Mostrar todas as abas encontradas
+            st.write("Abas encontradas:", list(todas_abas.keys()))
+            
             dados = {}
             
-            # Mapeia os nomes das abas esperadas
-            mapeamento_abas = {
-                'Prazos': ['prazos', 'prazo', 'PRAZOS', 'deadline'],
-                'Audiências': ['audiencias', 'audiência', 'AUDIÊNCIAS', 'AUDIENCIAS'],
-                'Iniciais': ['iniciais', 'inicial', 'INICIAIS', 'PETIÇÕES']
-            }
-            
-            for aba_padrao, variacoes in mapeamento_abas.items():
-                for sheet_name in excel_file.sheet_names:
-                    if sheet_name.lower() in [v.lower() for v in variacoes]:
-                        df = pd.read_excel(arquivo, sheet_name=sheet_name)
-                        
-                        # Identifica a coluna de data
-                        coluna_data = encontrar_coluna(df, 'data')
-                        if coluna_data:
-                            df[coluna_data] = pd.to_datetime(df[coluna_data], errors='coerce')
-                        
-                        dados[aba_padrao] = df
-                        break
+            # Processar aba de Prazos
+            if 'Prazos' in todas_abas:
+                df_prazos = todas_abas['Prazos']
+                # Debug: Mostrar colunas encontradas
+                st.write("Colunas na aba Prazos:", list(df_prazos.columns))
+                
+                # Identificar coluna de data
+                coluna_data = identificar_coluna_data(df_prazos)
+                if coluna_data:
+                    st.success(f"Coluna de data identificada: '{coluna_data}'")
+                    df_prazos[coluna_data] = pd.to_datetime(df_prazos[coluna_data], errors='coerce')
+                    dados['Prazos'] = df_prazos
                 else:
-                    st.warning(f"Aba '{aba_padrao}' não encontrada no arquivo.")
-                    dados[aba_padrao] = pd.DataFrame()
+                    st.error("Não foi possível identificar a coluna de data na aba Prazos")
+                    dados['Prazos'] = df_prazos
+            
+            # Processar outras abas
+            for aba in ['Audiências', 'Iniciais']:
+                if aba in todas_abas:
+                    dados[aba] = todas_abas[aba]
+                else:
+                    dados[aba] = pd.DataFrame()
             
             return dados
+            
     except Exception as e:
         st.error(f"Erro ao carregar arquivo: {str(e)}")
         return None
 
-def aplicar_filtros_estrategicos(df, filtros, coluna_data):
-    """Aplica filtros estratégicos ao DataFrame."""
-    df_filtrado = df.copy()
+def filtrar_dados(df, coluna_data, periodo, filtros_adicionais=None):
+    """Filtra os dados por período e filtros adicionais."""
+    if df.empty or coluna_data not in df.columns:
+        return df
     
-    if df_filtrado.empty:
-        return df_filtrado
-
     hoje = pd.Timestamp.now()
+    inicio_semana = hoje - timedelta(days=hoje.weekday())
+    fim_semana = inicio_semana + timedelta(days=6)
     
-    # Filtros de prazo
-    if "Apenas urgentes (3 dias)" in filtros:
-        df_filtrado = df_filtrado[df_filtrado[coluna_data] <= hoje + timedelta(days=3)]
-    if "Vencidos" in filtros:
-        df_filtrado = df_filtrado[df_filtrado[coluna_data] < hoje]
-        
-    # Filtros por responsável
-    coluna_responsavel = encontrar_coluna(df_filtrado, 'responsavel')
-    if coluna_responsavel and "Agrupar por responsável" in filtros:
-        st.subheader("Distribuição por Responsável")
-        contagem_resp = df_filtrado[coluna_responsavel].value_counts()
-        st.bar_chart(contagem_resp)
-        
-    # Filtros por complexidade
-    coluna_complexidade = encontrar_coluna(df_filtrado, 'complexidade')
-    if coluna_complexidade and "Filtrar por complexidade" in filtros:
-        complexidade = st.selectbox("Selecione a complexidade", 
-                                  df_filtrado[coluna_complexidade].unique())
-        df_filtrado = df_filtrado[df_filtrado[coluna_complexidade] == complexidade]
-        
-    # Filtros por cliente
-    coluna_cliente = encontrar_coluna(df_filtrado, 'cliente')
-    if coluna_cliente and "Agrupar por cliente" in filtros:
-        st.subheader("Distribuição por Cliente")
-        contagem_cliente = df_filtrado[coluna_cliente].value_counts().head(10)
-        st.bar_chart(contagem_cliente)
-        
-    # Análise de valor
-    coluna_valor = encontrar_coluna(df_filtrado, 'valor')
-    if coluna_valor and "Análise de valor" in filtros:
-        st.subheader("Análise de Valor")
-        valor_total = df_filtrado[coluna_valor].sum()
-        media_valor = df_filtrado[coluna_valor].mean()
-        col1, col2 = st.columns(2)
-        col1.metric("Valor Total", f"R$ {valor_total:,.2f}")
-        col2.metric("Valor Médio", f"R$ {media_valor:,.2f}")
-        
-    # KPIs
-    if "Mostrar KPIs" in filtros:
-        st.subheader("KPIs")
-        col1, col2, col3 = st.columns(3)
-        
-        # KPI 1: Cumprimento de Prazo
-        if coluna_data:
-            total_prazos = len(df_filtrado)
-            prazos_vencidos = len(df_filtrado[df_filtrado[coluna_data] < hoje])
-            taxa_cumprimento = ((total_prazos - prazos_vencidos) / total_prazos * 100) if total_prazos > 0 else 0
-            col1.metric("Taxa de Cumprimento de Prazo", f"{taxa_cumprimento:.1f}%")
-        
-        # KPI 2: Distribuição de Carga
-        if coluna_responsavel:
-            carga_media = df_filtrado[coluna_responsavel].value_counts().mean()
-            col2.metric("Média de Processos por Responsável", f"{carga_media:.1f}")
-        
-        # KPI 3: Valor Médio por Processo
-        if coluna_valor:
-            valor_medio = df_filtrado[coluna_valor].mean()
-            col3.metric("Valor Médio por Processo", f"R$ {valor_medio:,.2f}")
-            
-    return df_filtrado
+    # Filtro de período
+    if periodo == 'Esta semana':
+        df = df[(df[coluna_data] >= inicio_semana) & (df[coluna_data] <= fim_semana)]
+    elif periodo == 'Próxima semana':
+        inicio_prox = inicio_semana + timedelta(days=7)
+        fim_prox = fim_semana + timedelta(days=7)
+        df = df[(df[coluna_data] >= inicio_prox) & (df[coluna_data] <= fim_prox)]
+    elif periodo == 'Próximos 15 dias':
+        df = df[(df[coluna_data] >= hoje) & (df[coluna_data] <= hoje + timedelta(days=15))]
+    
+    # Filtros adicionais
+    if filtros_adicionais:
+        if 'Apenas urgentes' in filtros_adicionais:
+            df = df[df[coluna_data] <= hoje + timedelta(days=3)]
+        if 'Apenas atrasados' in filtros_adicionais:
+            df = df[df[coluna_data] < hoje]
+    
+    return df
 
 def main():
-    st.title("Dashboard Jurídico Estratégico")
+    st.title("Dashboard Jurídico")
     
     uploaded_file = st.file_uploader("Carregar arquivo Excel", type=['xlsx'])
     
@@ -150,74 +110,60 @@ def main():
         dados = carregar_dados(uploaded_file)
         
         if dados:
-            # Filtros principais
+            # Sidebar com filtros
             st.sidebar.title("Filtros")
-            
-            # Período
             periodo = st.sidebar.selectbox(
                 "Período",
-                ["Esta semana", "Próxima semana", "Próximos 15 dias", "Próximos 30 dias", "Todos"]
+                ["Esta semana", "Próxima semana", "Próximos 15 dias", "Todos"]
             )
             
-            # Filtros estratégicos
-            st.sidebar.subheader("Filtros Estratégicos")
-            filtros_estrategicos = st.sidebar.multiselect(
-                "Selecione os filtros",
-                [
-                    "Apenas urgentes (3 dias)",
-                    "Vencidos",
-                    "Agrupar por responsável",
-                    "Agrupar por cliente",
-                    "Filtrar por complexidade",
-                    "Análise de valor",
-                    "Mostrar KPIs",
-                    "Ordenar por data",
-                    "Ordenar por valor"
-                ]
+            filtros_adicionais = st.sidebar.multiselect(
+                "Filtros adicionais",
+                ["Apenas urgentes", "Apenas atrasados", "Ordenar por data"]
             )
             
-            # Abas principais
+            # Abas
             tab1, tab2, tab3 = st.tabs(["Prazos", "Audiências", "Iniciais"])
             
-            # Processamento de cada aba
-            for tab, nome_aba in zip([tab1, tab2, tab3], ['Prazos', 'Audiências', 'Iniciais']):
-                with tab:
-                    st.header(nome_aba)
-                    if not dados[nome_aba].empty:
-                        coluna_data = encontrar_coluna(dados[nome_aba], 'data')
+            # Aba de Prazos
+            with tab1:
+                st.header("Prazos")
+                if not dados['Prazos'].empty:
+                    coluna_data = identificar_coluna_data(dados['Prazos'])
+                    if coluna_data:
+                        df_filtrado = filtrar_dados(dados['Prazos'], coluna_data, periodo, filtros_adicionais)
                         
-                        if coluna_data:
-                            df_filtrado = aplicar_filtros_estrategicos(
-                                dados[nome_aba],
-                                filtros_estrategicos,
-                                coluna_data
-                            )
+                        # Métricas
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total de Prazos", len(df_filtrado))
+                        with col2:
+                            urgentes = len(df_filtrado[df_filtrado[coluna_data] <= pd.Timestamp.now() + timedelta(days=3)])
+                            st.metric("Prazos Urgentes", urgentes)
+                        with col3:
+                            atrasados = len(df_filtrado[df_filtrado[coluna_data] < pd.Timestamp.now()])
+                            st.metric("Prazos Atrasados", atrasados)
+                        
+                        # Exibir dados
+                        if not df_filtrado.empty:
+                            if "Ordenar por data" in filtros_adicionais:
+                                df_filtrado = df_filtrado.sort_values(coluna_data)
                             
-                            if not df_filtrado.empty:
-                                # Ordenação
-                                if "Ordenar por data" in filtros_estrategicos:
-                                    df_filtrado = df_filtrado.sort_values(coluna_data)
-                                elif "Ordenar por valor" in filtros_estrategicos:
-                                    coluna_valor = encontrar_coluna(df_filtrado, 'valor')
-                                    if coluna_valor:
-                                        df_filtrado = df_filtrado.sort_values(coluna_valor, ascending=False)
-                                
-                                # Exibição da tabela
-                                st.dataframe(
-                                    df_filtrado,
-                                    column_config={
-                                        coluna_data: st.column_config.DateColumn(
-                                            "Data",
-                                            format="DD/MM/YYYY"
-                                        )
-                                    }
-                                )
-                            else:
-                                st.info(f"Nenhum registro encontrado em {nome_aba} para os filtros selecionados.")
+                            st.dataframe(
+                                df_filtrado,
+                                column_config={
+                                    coluna_data: st.column_config.DateColumn(
+                                        "Data do Prazo",
+                                        format="DD/MM/YYYY"
+                                    )
+                                }
+                            )
                         else:
-                            st.error(f"Não foi possível identificar a coluna de data em {nome_aba}")
+                            st.info("Nenhum prazo encontrado para os filtros selecionados.")
                     else:
-                        st.warning(f"Nenhum dado encontrado em {nome_aba}")
+                        st.error("Não foi possível identificar a coluna de data")
+                else:
+                    st.warning("Nenhum dado encontrado na aba de Prazos")
 
 if __name__ == "__main__":
     main()
