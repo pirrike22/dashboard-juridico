@@ -26,12 +26,13 @@ def load_data(file):
         st.error("Nenhuma das abas esperadas ('Prazos', 'Audiência', 'Iniciais') foi encontrada no arquivo.")
         return None, None
     
-    data = {matched_sheets[sheet]: pd.read_excel(file, sheet_name=matched_sheets[sheet]) for sheet in matched_sheets}
+    data = {matched_sheets[sheet]: pd.read_excel(file, sheet_name=matched_sheets[sheet], parse_dates=True) for sheet in matched_sheets}
     
     # Ajustar formatação de datas para dia/mês/ano
     for sheet in data:
-        for col in data[sheet].select_dtypes(include=['datetime']):
-            data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
+        for col in data[sheet].columns:
+            if data[sheet][col].dtype == 'datetime64[ns]':
+                data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
     
     return data, valid_sheets
 
@@ -102,4 +103,3 @@ if uploaded_file:
                 file_name=f"dados_filtrados_{sheet}.csv",
                 mime="text/csv"
             )
-
