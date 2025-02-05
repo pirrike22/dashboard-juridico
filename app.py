@@ -31,9 +31,10 @@ def load_data(file):
     # Ajustar formatação de datas e ordená-las em ordem crescente
     for sheet in data:
         for col in data[sheet].columns:
-            if data[sheet][col].dtype == 'datetime64[ns]' or "data" in col.lower():
-                data[sheet][col] = pd.to_datetime(data[sheet][col], errors='coerce').dt.strftime('%d/%m/%Y')
+            if "data" in col.lower() or data[sheet][col].dtype == 'datetime64[ns]':
+                data[sheet][col] = pd.to_datetime(data[sheet][col], errors='coerce')
                 data[sheet] = data[sheet].sort_values(by=[col], ascending=True)
+                data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
     
     return data, valid_sheets
 
@@ -81,7 +82,7 @@ if uploaded_file:
             
             # Exibir dados filtrados
             st.subheader("Dados Filtrados")
-            st.dataframe(filtered_df)
+            st.dataframe(filtered_df.sort_values(by=[col for col in filtered_df.columns if "data" in col.lower()], ascending=True))
             
             # Criar gráficos dinâmicos
             numeric_columns = filtered_df.select_dtypes(include=['number']).columns.tolist()
@@ -104,4 +105,3 @@ if uploaded_file:
                 file_name=f"dados_filtrados_{sheet}.csv",
                 mime="text/csv"
             )
-
