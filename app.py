@@ -5,7 +5,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import requests
 from io import StringIO
-import unicodedata
 
 st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
 
@@ -16,17 +15,6 @@ URLS = {
     'iniciais': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTJjDmlGNdybLnCLRZ1GpeJN8cuDWnGH59BiNJ2U0rklQR8BD3wQKbjgVFX0HvT7-Syk5cIJVzebrwk/pub?gid=1311683775&single=true&output=csv'
 }
 
-def normalizar_texto(texto):
-    """Remove acentos e caracteres especiais do texto."""
-    if isinstance(texto, str):
-        # Normaliza o texto (remove acentos)
-        texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
-        # Remove caracteres especiais e espaços extras
-        texto = ''.join(c for c in texto if c.isalnum() or c == ' ')
-        # Substitui espaços por underscore e converte para minúsculas
-        return texto.strip().replace(' ', '_').lower()
-    return texto
-
 def converter_data(data_str):
     """Converte string de data para datetime."""
     if pd.isna(data_str):
@@ -34,7 +22,6 @@ def converter_data(data_str):
     
     try:
         data_str = str(data_str).strip()
-        # Tratar diferentes formatos de data
         if 'nov' in data_str.lower():
             data_str = data_str.lower().replace('nov.', '11')
             return pd.to_datetime(data_str + '/2024', format='%d/%m/%Y')
@@ -49,17 +36,7 @@ def converter_data(data_str):
 @st.cache_data(ttl=300)
 def load_data():
     try:
-        # Carregar Prazos
-        response = requests.get(URLS['prazos'])
-        response.raise_for_status()
-        df_prazos = pd.read_csv(
-            StringIO(response.text),
-            encoding='utf-8',
-            skiprows=lambda x: x == 0  # Pular primeira linha se vazia
-        )
-        
-        # Limpar e renomear colunas dos Prazos
-        df_prazos = df_prazos.dropna(axis=1, how='all')  # Remover colunas vazias
+        # Mapeamento correto das colunas para cada DataFrame
         colunas_prazos = {
             'DATA (D-1)': 'data',
             'CLIENTE': 'cliente',
@@ -74,34 +51,24 @@ def load_data():
             'PRONTO PARA PROTOCOLO': 'pronto_protocolo',
             'PROTOCOLADO?': 'protocolado'
         }
-        df_prazos = df_prazos.rename(columns=lambda x: colunas_prazos.get(x, normalizar_texto(x)))
         
-        # Carregar Audiências
-        response = requests.get(URLS['audiencias'])
-        response.raise_for_status()
-        df_audiencias = pd.read_csv(StringIO(response.text), encoding='utf-8')
-        
-        # Limpar e renomear colunas das Audiências
         colunas_audiencias = {
             'DATA': 'data',
             'HORÃRIO': 'horario',
             'RAZÃO SOCIAL': 'cliente',
-            'TIPO DE AUDIÃNCIA': 'tipo',
-            'VARA/TURMA': 'vara',
-            'MATÃRIA': 'materia',
+            'CLIENTE AVISADO? (1 semana antes)': 'cliente_avisado',
+            'LEMBRETE ENVIADO? (1 dia antes)': 'lembrete_enviado',
+            'TESTEMUNHA': 'testemunha',
+            'NA AGENDA': 'na_agenda',
             'RESPONSÃVEL': 'responsavel',
             'NÂº DO PROCESSO': 'processo',
+            'VARA/TURMA': 'vara',
+            'TIPO DE AUDIÃNCIA': 'tipo',
+            'MATÃRIA': 'materia',
             'PARTE ADVERSA': 'parte_adversa',
             'LINK/OBSERVAÃÃES': 'observacoes'
         }
-        df_audiencias = df_audiencias.rename(columns=lambda x: colunas_audiencias.get(x, normalizar_texto(x)))
         
-        # Carregar Iniciais
-        response = requests.get(URLS['iniciais'])
-        response.raise_for_status()
-        df_iniciais = pd.read_csv(StringIO(response.text), encoding='utf-8')
-        
-        # Limpar e renomear colunas dos Iniciais
         colunas_iniciais = {
             'DATA': 'data',
             'Cliente': 'cliente',
@@ -110,11 +77,31 @@ def load_data():
             'OBSERVAÃÃO': 'observacoes',
             'RESPONSÃVEL': 'responsavel',
             'DATA DA ENTREGA': 'data_entrega',
+            'LIBERADO PARA PROTOCOLO': 'liberado_protocolo',
             'DISTRIBUÃDO': 'status',
+            'PROTOCOLADO': 'protocolado',
             'DATA DO PROTOCOLO': 'data_protocolo',
             'NÂº DO PROCESSO': 'processo'
         }
-        df_iniciais = df_iniciais.rename(columns=lambda x: colunas_iniciais.get(x, normalizar_texto(x)))
+        
+        # Carregar e processar Prazos
+        response = requests.get(URLS['prazos'])
+        response.raise_for_status()
+        df_prazos = pd.read_csv(StringIO(response.text), encoding='utf-8', skiprows=lambda x: x == 0)
+        df_prazos = df_prazos.dropna(axis=1, how='all')
+        df_prazos = df_prazos.rename(columns=colunas_prazos)
+        
+        # Carregar e processar Audiências
+        response = requests.get(URLS['audiencias'])
+        response.raise_for_status()
+        df_audiencias = pd.read_csv(StringIO(response.text), encoding='utf-8')
+        df_audiencias = df_audiencias.rename(columns=colunas_audiencias)
+        
+        # Carregar e processar Iniciais
+        response = requests.get(URLS['iniciais'])
+        response.raise_for_status()
+        df_iniciais = pd.read_csv(StringIO(response.text), encoding='utf-8')
+        df_iniciais = df_iniciais.rename(columns=colunas_iniciais)
         
         # Converter datas em todos os DataFrames
         for df in [df_prazos, df_audiencias, df_iniciais]:
@@ -132,6 +119,7 @@ def load_data():
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {str(e)}")
         st.write("Detalhes completos do erro:", str(e))
+        st.write("Traceback:", st.exception)
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # Título do Dashboard
