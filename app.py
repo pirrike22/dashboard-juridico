@@ -4,15 +4,15 @@ import matplotlib.pyplot as plt
 
 # Função para carregar dados
 def load_data(file):
-    sheets = pd.ExcelFile(file).sheet_names
-    data = {sheet: pd.read_excel(file, sheet_name=sheet) for sheet in sheets}
+    selected_sheets = ["Prazos", "Audiência", "Iniciais"]
+    data = {sheet: pd.read_excel(file, sheet_name=sheet) for sheet in selected_sheets}
     
     # Ajustar formatação de datas
     for sheet in data:
         for col in data[sheet].select_dtypes(include=['datetime']):
             data[sheet][col] = data[sheet][col].dt.strftime('%d/%m/%Y')
     
-    return data, sheets
+    return data, selected_sheets
 
 # Configuração do Streamlit
 st.set_page_config(page_title="Dashboard Jurídico", layout="wide")
@@ -26,7 +26,7 @@ if uploaded_file:
     st.success("Dados carregados com sucesso!")
     
     # Criar abas para cada planilha
-    tab_names = [st.tabs([sheet])[0] for sheet in sheets]
+    tab_names = st.tabs(sheets)
     
     for i, sheet in enumerate(sheets):
         with tab_names[i]:
@@ -34,18 +34,19 @@ if uploaded_file:
             st.subheader(f"Visualização da Tabela - {sheet}")
             st.dataframe(df)
             
-            # Criar filtros dinâmicos
+            # Criar filtros dinâmicos sem pré-seleção
             st.sidebar.header(f"Filtros - {sheet}")
             columns = df.columns.tolist()
             filters = {}
             for col in columns:
                 unique_values = df[col].dropna().unique().tolist()
-                filters[col] = st.sidebar.multiselect(f"Filtrar {col}", unique_values, default=unique_values, key=f"{sheet}_{col}")
+                filters[col] = st.sidebar.multiselect(f"Filtrar {col}", unique_values, key=f"{sheet}_{col}")
             
-            # Aplicar filtros
+            # Aplicar filtros apenas se houver seleção
             filtered_df = df.copy()
             for col, values in filters.items():
-                filtered_df = filtered_df[filtered_df[col].isin(values)]
+                if values:
+                    filtered_df = filtered_df[filtered_df[col].isin(values)]
             
             # Exibir dados filtrados
             st.subheader("Dados Filtrados")
@@ -72,4 +73,5 @@ if uploaded_file:
                 file_name=f"dados_filtrados_{sheet}.csv",
                 mime="text/csv"
             )
+
 
