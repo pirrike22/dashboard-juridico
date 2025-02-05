@@ -36,76 +36,47 @@ def converter_data(data_str):
 @st.cache_data(ttl=300)
 def load_data():
     try:
-        # Mapeamento correto das colunas para cada DataFrame
-        colunas_prazos = {
-            'DATA (D-1)': 'data',
-            'CLIENTE': 'cliente',
-            'PROCESSO': 'processo',
-            'TAREFA': 'tarefa',
-            'RESPONSÃVEL': 'responsavel',
-            'DATA DE CIÃNCIA': 'data_ciencia',
-            'DATA DA DELEGAÃÃO': 'data_delegacao',
-            'PRAZO INTERNO (DEL.+5)': 'prazo_interno',
-            'DATA DA ENTREGA': 'data_entrega',
-            'COMPLEXIDADE': 'complexidade',
-            'PRONTO PARA PROTOCOLO': 'pronto_protocolo',
-            'PROTOCOLADO?': 'protocolado'
-        }
-        
-        colunas_audiencias = {
-            'DATA': 'data',
-            'HORÃRIO': 'horario',
-            'RAZÃO SOCIAL': 'cliente',
-            'CLIENTE AVISADO? (1 semana antes)': 'cliente_avisado',
-            'LEMBRETE ENVIADO? (1 dia antes)': 'lembrete_enviado',
-            'TESTEMUNHA': 'testemunha',
-            'NA AGENDA': 'na_agenda',
-            'RESPONSÃVEL': 'responsavel',
-            'NÂº DO PROCESSO': 'processo',
-            'VARA/TURMA': 'vara',
-            'TIPO DE AUDIÃNCIA': 'tipo',
-            'MATÃRIA': 'materia',
-            'PARTE ADVERSA': 'parte_adversa',
-            'LINK/OBSERVAÃÃES': 'observacoes'
-        }
-        
-        colunas_iniciais = {
-            'DATA': 'data',
-            'Cliente': 'cliente',
-            'CNPJ/CPF': 'documento',
-            'MATÃRIA': 'tipo_acao',
-            'OBSERVAÃÃO': 'observacoes',
-            'RESPONSÃVEL': 'responsavel',
-            'DATA DA ENTREGA': 'data_entrega',
-            'LIBERADO PARA PROTOCOLO': 'liberado_protocolo',
-            'DISTRIBUÃDO': 'status',
-            'PROTOCOLADO': 'protocolado',
-            'DATA DO PROTOCOLO': 'data_protocolo',
-            'NÂº DO PROCESSO': 'processo'
-        }
-        
         # Carregar e processar Prazos
         response = requests.get(URLS['prazos'])
         response.raise_for_status()
-        df_prazos = pd.read_csv(StringIO(response.text), encoding='utf-8', skiprows=lambda x: x == 0)
+        df_prazos = pd.read_csv(StringIO(response.text), encoding='latin1', skiprows=lambda x: x == 0)
         df_prazos = df_prazos.dropna(axis=1, how='all')
-        df_prazos = df_prazos.rename(columns=colunas_prazos)
+        
+        # Renomear colunas de Prazos
+        df_prazos.columns = [
+            'data', 'cliente', 'processo', 'tarefa', 'responsavel',
+            'data_ciencia', 'data_delegacao', 'prazo_interno',
+            'data_entrega', 'complexidade', 'pronto_protocolo',
+            'protocolado'
+        ]
         
         # Carregar e processar Audiências
         response = requests.get(URLS['audiencias'])
         response.raise_for_status()
-        df_audiencias = pd.read_csv(StringIO(response.text), encoding='utf-8')
-        df_audiencias = df_audiencias.rename(columns=colunas_audiencias)
+        df_audiencias = pd.read_csv(StringIO(response.text), encoding='latin1')
+        
+        # Renomear colunas de Audiências - usar índices das colunas para evitar problemas com caracteres especiais
+        df_audiencias.columns = [
+            'data', 'horario', 'cliente', 'cliente_avisado', 'lembrete_enviado',
+            'testemunha', 'na_agenda', 'responsavel', 'processo', 'vara',
+            'tipo', 'materia', 'parte_adversa', 'observacoes'
+        ]
         
         # Carregar e processar Iniciais
         response = requests.get(URLS['iniciais'])
         response.raise_for_status()
-        df_iniciais = pd.read_csv(StringIO(response.text), encoding='utf-8')
-        df_iniciais = df_iniciais.rename(columns=colunas_iniciais)
+        df_iniciais = pd.read_csv(StringIO(response.text), encoding='latin1')
+        
+        # Renomear colunas de Iniciais - usar índices das colunas para evitar problemas com caracteres especiais
+        df_iniciais.columns = [
+            'data', 'cliente', 'documento', 'tipo_acao', 'observacoes',
+            'responsavel', 'data_entrega', 'liberado_protocolo', 'status',
+            'protocolado', 'data_protocolo', 'processo'
+        ]
         
         # Converter datas em todos os DataFrames
         for df in [df_prazos, df_audiencias, df_iniciais]:
-            date_columns = [col for col in df.columns if 'data' in col.lower()]
+            date_columns = [col for col in df.columns if 'data' in col]
             for col in date_columns:
                 df[col] = df[col].apply(converter_data)
         
@@ -119,7 +90,6 @@ def load_data():
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {str(e)}")
         st.write("Detalhes completos do erro:", str(e))
-        st.write("Traceback:", st.exception)
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # Título do Dashboard
@@ -132,17 +102,17 @@ df_prazos, df_audiencias, df_iniciais = load_data()
 st.write("### Dados Processados")
 
 st.write("#### Prazos")
-st.write("Colunas:", sorted(df_prazos.columns.tolist()))
+st.write("Colunas:", df_prazos.columns.tolist())
 st.write("Primeiras linhas:")
 st.write(df_prazos.head())
 
 st.write("#### Audiências")
-st.write("Colunas:", sorted(df_audiencias.columns.tolist()))
+st.write("Colunas:", df_audiencias.columns.tolist())
 st.write("Primeiras linhas:")
 st.write(df_audiencias.head())
 
 st.write("#### Iniciais")
-st.write("Colunas:", sorted(df_iniciais.columns.tolist()))
+st.write("Colunas:", df_iniciais.columns.tolist())
 st.write("Primeiras linhas:")
 st.write(df_iniciais.head())
 
