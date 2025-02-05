@@ -23,31 +23,43 @@ def load_data(uploaded_file):
         dfs = {}
         sheet_names = [s.lower() for s in xls.sheet_names]
         
+        # Função auxiliar para encontrar a aba correta
+        def find_sheet(possible_names, available_sheets):
+            for name in possible_names:
+                for sheet in available_sheets:
+                    if name.lower() == sheet.lower():
+                        return sheet
+            return None
+
+        # Definir possíveis nomes para cada aba
+        prazo_names = ['Prazos', 'PRAZOS', 'prazos', 'Prazo', 'PRAZO']
+        audiencia_names = ['Audiências', 'AUDIÊNCIAS', 'Audiencias', 'AUDIENCIAS', 'audiencias', 'Audiência', 'AUDIÊNCIA']
+        inicial_names = ['Iniciais', 'INICIAIS', 'iniciais', 'Inicial', 'INICIAL']
+
+        # Encontrar as abas corretas
+        prazo_sheet = find_sheet(prazo_names, xls.sheet_names)
+        audiencia_sheet = find_sheet(audiencia_names, xls.sheet_names)
+        inicial_sheet = find_sheet(inicial_names, xls.sheet_names)
+
         # Carregar aba Prazos
-        for sheet in ['prazos', 'PRAZOS', 'Prazos']:
-            if sheet.lower() in sheet_names:
-                dfs['prazos'] = pd.read_excel(xls, sheet)
-                if 'Data' in dfs['prazos'].columns:
-                    dfs['prazos']['Data'] = pd.to_datetime(dfs['prazos']['Data'], errors='coerce')
-                break
+        if prazo_sheet:
+            dfs['prazos'] = pd.read_excel(xls, prazo_sheet)
+            if 'Data' in dfs['prazos'].columns:
+                dfs['prazos']['Data'] = pd.to_datetime(dfs['prazos']['Data'], errors='coerce')
         
         # Carregar aba Audiências
-        for sheet in ['audiências', 'AUDIÊNCIAS', 'Audiencias', 'audiencias']:
-            if sheet.lower() in sheet_names:
-                dfs['audiencias'] = pd.read_excel(xls, sheet)
-                if 'Data' in dfs['audiencias'].columns:
-                    dfs['audiencias']['Data'] = pd.to_datetime(dfs['audiencias']['Data'], errors='coerce')
-                if 'Horário' in dfs['audiencias'].columns:
-                    dfs['audiencias']['Horário'] = pd.to_datetime(dfs['audiencias']['Horário'], format='mixed', errors='coerce')
-                break
+        if audiencia_sheet:
+            dfs['audiencias'] = pd.read_excel(xls, audiencia_sheet)
+            if 'Data' in dfs['audiencias'].columns:
+                dfs['audiencias']['Data'] = pd.to_datetime(dfs['audiencias']['Data'], errors='coerce')
+            if 'Horário' in dfs['audiencias'].columns:
+                dfs['audiencias']['Horário'] = pd.to_datetime(dfs['audiencias']['Horário'], format='mixed', errors='coerce')
         
         # Carregar aba Iniciais
-        for sheet in ['iniciais', 'INICIAIS', 'Iniciais']:
-            if sheet.lower() in sheet_names:
-                dfs['iniciais'] = pd.read_excel(xls, sheet)
-                if 'Data' in dfs['iniciais'].columns:
-                    dfs['iniciais']['Data'] = pd.to_datetime(dfs['iniciais']['Data'], errors='coerce')
-                break
+        if inicial_sheet:
+            dfs['iniciais'] = pd.read_excel(xls, inicial_sheet)
+            if 'Data' in dfs['iniciais'].columns:
+                dfs['iniciais']['Data'] = pd.to_datetime(dfs['iniciais']['Data'], errors='coerce')
         
         # Verificar se todas as abas necessárias foram carregadas
         required_sheets = ['prazos', 'audiencias', 'iniciais']
