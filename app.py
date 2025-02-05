@@ -76,13 +76,26 @@ def load_data(uploaded_file):
         return None, None, None
 
 def filter_by_period(df):
-    # Encontrar a coluna de data
-    date_columns = [col for col in df.columns if 'data' in col.lower()]
-    if not date_columns:
-        st.error("Não foi possível encontrar a coluna de data no DataFrame")
-        return df
+    # Debug: mostrar as colunas disponíveis
+    st.write("Colunas disponíveis:", df.columns.tolist())
     
-    date_col = date_columns[0]
+    # Encontrar a coluna de data (pode ter variações no nome)
+    date_cols = [col for col in df.columns if any(date_term in col.lower() 
+                 for date_term in ['data', 'date', 'dt', 'data audiência', 'data prazo'])]
+    
+    if not date_cols:
+        st.warning("Não foi encontrada coluna de data. Mostrando todos os registros.")
+        return df
+        
+    date_col = date_cols[0]
+    st.write(f"Usando coluna de data: {date_col}")
+    
+    # Converter a coluna de data para datetime se ainda não estiver
+    try:
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+    except Exception as e:
+        st.error(f"Erro ao converter datas: {str(e)}")
+        return df
     
     periodo = st.sidebar.selectbox(
         "Filtrar por período",
@@ -94,20 +107,27 @@ def filter_by_period(df):
     
     hoje = pd.Timestamp.now().normalize()
     
-    if periodo == "Esta semana":
-        inicio = hoje - timedelta(days=hoje.weekday())
-        fim = inicio + timedelta(days=6)
-    elif periodo == "Próxima semana":
-        inicio = hoje - timedelta(days=hoje.weekday()) + timedelta(days=7)
-        fim = inicio + timedelta(days=6)
-    else:  # Próximos 15 dias
-        inicio = hoje
-        fim = hoje + timedelta(days=15)
-    
-    # Assegurar que a coluna de data está no formato datetime
-    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-    
-    return df[df[date_col].between(inicio, fim)]
+    try:
+        if periodo == "Esta semana":
+            inicio = hoje - timedelta(days=hoje.weekday())
+            fim = inicio + timedelta(days=6)
+        elif periodo == "Próxima semana":
+            inicio = hoje - timedelta(days=hoje.weekday()) + timedelta(days=7)
+            fim = inicio + timedelta(days=6)
+        else:  # Próximos 15 dias
+            inicio = hoje
+            fim = hoje + timedelta(days=15)
+        
+        # Debug: mostrar datas do filtro
+        st.write(f"Filtrando de {inicio.strftime('%d/%m/%Y')} até {fim.strftime('%d/%m/%Y')}")
+        
+        # Aplicar filtro com tratamento de erro
+        filtered_df = df[df[date_col].notna() & df[date_col].between(inicio, fim)]
+        return filtered_df
+        
+    except Exception as e:
+        st.error(f"Erro ao aplicar filtro: {str(e)}")
+        return df
 
 # Interface principal
 st.title("🔍 Dashboard Jurídica")
