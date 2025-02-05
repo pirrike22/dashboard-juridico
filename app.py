@@ -76,6 +76,14 @@ def load_data(uploaded_file):
         return None, None, None
 
 def filter_by_period(df):
+    # Encontrar a coluna de data
+    date_columns = [col for col in df.columns if 'data' in col.lower()]
+    if not date_columns:
+        st.error("Não foi possível encontrar a coluna de data no DataFrame")
+        return df
+    
+    date_col = date_columns[0]
+    
     periodo = st.sidebar.selectbox(
         "Filtrar por período",
         ["Todos", "Esta semana", "Próxima semana", "Próximos 15 dias"]
@@ -96,7 +104,10 @@ def filter_by_period(df):
         inicio = hoje
         fim = hoje + timedelta(days=15)
     
-    return df[df['Data'].between(inicio, fim)]
+    # Assegurar que a coluna de data está no formato datetime
+    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+    
+    return df[df[date_col].between(inicio, fim)]
 
 # Interface principal
 st.title("🔍 Dashboard Jurídica")
@@ -187,10 +198,20 @@ elif view == "Audiências":
     
     # Formatação das colunas de data e horário para exibição
     audiencias_display = audiencias_filtradas.copy()
-    audiencias_display['Data'] = audiencias_display['Data'].dt.strftime('%d/%m/%Y')
     
-    if 'Horário' in audiencias_display.columns:
-        audiencias_display['Horário'] = pd.to_datetime(audiencias_display['Horário'], format='mixed', errors='coerce').dt.strftime('%H:%M')
+    # Identificar a coluna de data (pode ter variações no nome)
+    date_columns = [col for col in audiencias_display.columns if 'data' in col.lower()]
+    horario_columns = [col for col in audiencias_display.columns if 'hor' in col.lower()]
+    
+    # Formatar a coluna de data
+    if date_columns:
+        date_col = date_columns[0]
+        audiencias_display[date_col] = pd.to_datetime(audiencias_display[date_col], errors='coerce').dt.strftime('%d/%m/%Y')
+    
+    # Formatar a coluna de horário
+    if horario_columns:
+        horario_col = horario_columns[0]
+        audiencias_display[horario_col] = pd.to_datetime(audiencias_display[horario_col], format='mixed', errors='coerce').dt.strftime('%H:%M')
     
     # Exibição dos dados formatados
     st.dataframe(audiencias_display, hide_index=True)
@@ -205,15 +226,19 @@ elif view == "Audiências":
         # Criar figura base
         fig = go.Figure()
         
-        # Adicionar as audiências como pontos
-        fig.add_trace(go.Scatter(
-            x=audiencias_filtradas['Data'],
-            y=audiencias_filtradas[processo_column],
-            mode='markers+text',
-            marker=dict(size=12, symbol='circle'),
-            text=audiencias_filtradas['Tipo'] if 'Tipo' in audiencias_filtradas.columns else None,
-            textposition='top center'
-        ))
+        # Encontrar a coluna de data
+        date_columns = [col for col in audiencias_filtradas.columns if 'data' in col.lower()]
+        if date_columns:
+            date_col = date_columns[0]
+            # Adicionar as audiências como pontos
+            fig.add_trace(go.Scatter(
+                x=audiencias_filtradas[date_col],
+                y=audiencias_filtradas[processo_column],
+                mode='markers+text',
+                marker=dict(size=12, symbol='circle'),
+                text=audiencias_filtradas['Tipo'] if 'Tipo' in audiencias_filtradas.columns else None,
+                textposition='top center'
+            ))
         
         # Configurar o layout
         fig.update_layout(
