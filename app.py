@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -7,14 +8,12 @@ st.title("Dashboard Jurídico")
 uploaded_file = st.file_uploader("Faça upload da planilha .xlsx", type=["xlsx"])
 
 if uploaded_file is not None:
-    # Função para carregar as planilhas
     def load_data(file):
         xls = pd.ExcelFile(file)
         prazos_df = pd.read_excel(xls, sheet_name="Prazos", dtype=str, header=0)
         audiencias_df = pd.read_excel(xls, sheet_name="Audiências", dtype=str, header=0)
         iniciais_df = pd.read_excel(xls, sheet_name="Iniciais", dtype=str, header=0)
         
-        # Remover colunas completamente vazias
         prazos_df = prazos_df.dropna(axis=1, how='all')
         audiencias_df = audiencias_df.dropna(axis=1, how='all')
         iniciais_df = iniciais_df.dropna(axis=1, how='all')
@@ -23,29 +22,27 @@ if uploaded_file is not None:
 
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-    #####################################
-    # Correção da aba Prazos
-    # Converter o campo "Unnamed: 0" para data (sem horário) no formato dd/mm/aaaa
+    # Ajustar a coluna "Unnamed: 0" para exibir apenas a data no formato dia/mês/ano
     if "Unnamed: 0" in prazos_df.columns:
-        prazos_df["Unnamed: 0"] = pd.to_datetime(
-            prazos_df["Unnamed: 0"], 
-            errors='coerce',
-            dayfirst=True
-        ).dt.strftime("%d/%m/%Y")
-    
-    #####################################
-    # Processar coluna de horários na aba Audiências
+        prazos_df["Unnamed: 0"] = pd.to_datetime(prazos_df["Unnamed: 0"], errors='coerce').dt.strftime("%d/%m/%Y")
+
+    # Função para normalizar horários
     def normalize_time(time_str):
         if pd.isna(time_str) or str(time_str).strip() in ['', 'NaT']:
             return "00:00"
+        
         time_str = str(time_str).strip().upper()
-        # Converter formatos do tipo '14h00' para '14:00'
+        
+        # Converter formato '14h00' para '14:00'
         time_str = time_str.replace('H', ':').replace('h', ':')
-        # Se houver segundos, mantemos apenas horas e minutos
+        
+        # Remover segundos se existirem
         if len(time_str.split(':')) > 2:
             time_str = ":".join(time_str.split(':')[:2])
+            
         return time_str
 
+    # Processar coluna de horários
     if "HORÁRIO" in audiencias_df.columns:
         audiencias_df["HORÁRIO"] = audiencias_df["HORÁRIO"].apply(normalize_time)
         audiencias_df["HORÁRIO"] = pd.to_datetime(
@@ -54,9 +51,9 @@ if uploaded_file is not None:
             errors='coerce'
         ).dt.strftime("%H:%M")
 
-    #####################################
-    # Converter outras colunas de data nas abas (exceto Prazos, que já foi tratado)
+    # Converter outras colunas de data
     date_columns = {
+        'prazos_df': ['DATA', 'DATA DE CIÊNCIA', 'DATA DA DELEGAÇÃO', 'PRAZO INTERNO (DEL.+5)', 'DATA DA ENTREGA'],
         'audiencias_df': ['DATA'],
         'iniciais_df': ['DATA']
     }
@@ -65,82 +62,55 @@ if uploaded_file is not None:
         df = locals()[df_name]
         for col in cols:
             if col in df.columns:
-                df[col] = pd.to_datetime(
-                    df[col], 
-                    errors='coerce',
-                    dayfirst=True
-                ).dt.strftime("%d/%m/%Y")
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%d/%m/%Y")
 
-    #####################################
-    # Filtros Estratégicos no Sidebar
+    # Filtros estratégicos
+    today = datetime.today()
+    start_of_week = today - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
+    next_week_start = end_of_week + timedelta(days=1)
+    next_week_end = next_week_start + timedelta(days=6)
+    next_15_days = today + timedelta(days=15)
 
-    st.sidebar.header("Filtros Estratégicos")
+    # Filtro para prazos
+    st.sidebar.subheader("Filtros para Prazos")
+    prazos_filter = st.sidebar.selectbox("Selecione o filtro", ["Todos", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
 
-    # Filtros para a aba Prazos
-    if "RESPONSÁVEL" in prazos_df.columns:
-        responsavel_selecionado = st.sidebar.multiselect(
-            "Responsável (Prazos)",
-            options=prazos_df["RESPONSÁVEL"].unique()
-        )
-        if responsavel_selecionado:
-            prazos_df = prazos_df[prazos_df["RESPONSÁVEL"].isin(responsavel_selecionado)]
-    
-    if "CLIENTE" in prazos_df.columns:
-        cliente_prazos = st.sidebar.text_input("Buscar Cliente (Prazos)")
-        if cliente_prazos:
-            prazos_df = prazos_df[prazos_df["CLIENTE"].str.contains(cliente_prazos, case=False, na=False)]
+    if prazos_filter == "Esta Semana":
+        prazos_df = prazos_df[
+            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') >= start_of_week) &
+            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= end_of_week)
+        ]
+    elif prazos_filter == "Semana Seguinte":
+        prazos_df = prazos_df[
+            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') >= next_week_start) &
+            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= next_week_end)
+        ]
+    elif prazos_filter == "Próximos 15 Dias":
+        prazos_df = prazos_df[
+            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= next_15_days)
+        ]
 
-    # Filtros para a aba Audiências
-    if "TIPO DE AUDIÊNCIA" in audiencias_df.columns:
-        tipo_audiencia = st.sidebar.multiselect(
-            "Tipo de Audiência",
-            options=audiencias_df["TIPO DE AUDIÊNCIA"].unique()
-        )
-        if tipo_audiencia:
-            audiencias_df = audiencias_df[audiencias_df["TIPO DE AUDIÊNCIA"].isin(tipo_audiencia)]
-    
-    if "RAZÃO SOCIAL" in audiencias_df.columns:
-        cliente_audiencias = st.sidebar.text_input("Buscar Cliente (Audiências)")
-        if cliente_audiencias:
-            audiencias_df = audiencias_df[audiencias_df["RAZÃO SOCIAL"].str.contains(cliente_audiencias, case=False, na=False)]
-    
-    # Filtro de período para Prazos e Audiências
-    periodo = st.sidebar.radio(
-        "Filtrar por período",
-        options=["Todos", "Esta semana", "Semana seguinte", "Próximos 15 dias"]
-    )
+    # Filtro para audiências
+    st.sidebar.subheader("Filtros para Audiências")
+    audiencias_filter = st.sidebar.selectbox("Selecione o filtro para Audiências", ["Todos", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
 
-    def filter_by_period(df, date_column, period):
-        """
-        Filtra um DataFrame de acordo com o período em relação à data atual.
-        O parâmetro date_column deve conter datas no formato que permita conversão via pd.to_datetime.
-        """
-        if date_column in df.columns:
-            df[date_column] = pd.to_datetime(df[date_column], dayfirst=True, errors='coerce')
-            hoje = datetime.today()
-            if period == "Esta semana":
-                start = hoje
-                end = hoje + timedelta(days=7)
-                return df[(df[date_column] >= start) & (df[date_column] < end)]
-            elif period == "Semana seguinte":
-                start = hoje + timedelta(days=7)
-                end = hoje + timedelta(days=14)
-                return df[(df[date_column] >= start) & (df[date_column] < end)]
-            elif period == "Próximos 15 dias":
-                start = hoje
-                end = hoje + timedelta(days=15)
-                return df[(df[date_column] >= start) & (df[date_column] < end)]
-        return df
+    if audiencias_filter == "Esta Semana":
+        audiencias_df = audiencias_df[
+            (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') >= start_of_week) &
+            (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') <= end_of_week)
+        ]
+    elif audiencias_filter == "Semana Seguinte":
+        audiencias_df = audiencias_df[
+            (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') >= next_week_start) &
+            (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') <= next_week_end)
+        ]
+    elif audiencias_filter == "Próximos 15 Dias":
+        audiencias_df = audiencias_df[
+            (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') <= next_15_days)
+        ]
 
-    if periodo != "Todos":
-        # Para Prazos, utiliza-se o campo "Unnamed: 0"
-        prazos_df = filter_by_period(prazos_df, "Unnamed: 0", periodo)
-        # Para Audiências, utiliza-se o campo "DATA"
-        audiencias_df = filter_by_period(audiencias_df, "DATA", periodo)
-
-    #####################################
-    # Exibir métricas e tabelas
-
+    # Exibição dos dados
     st.metric("Total de Prazos", len(prazos_df))
     st.metric("Total de Audiências", len(audiencias_df))
 
@@ -154,3 +124,5 @@ if uploaded_file is not None:
     st.dataframe(iniciais_df)
 
     st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
+```
+
