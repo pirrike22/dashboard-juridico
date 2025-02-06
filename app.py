@@ -63,6 +63,12 @@ if uploaded_file is not None:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%d/%m/%Y")
 
+    # Preencher o campo "LINK/OBSERVAÇÕES" com "vazio" onde não houver informações
+    if "LINK/OBSERVAÇÕES" in audiencias_df.columns:
+        audiencias_df["LINK/OBSERVAÇÕES"] = audiencias_df["LINK/OBSERVAÇÕES"].fillna("vazio")
+    else:
+        audiencias_df["LINK/OBSERVAÇÕES"] = "vazio"
+
     # Filtros estratégicos
     today = datetime.today()
     start_of_week = today - timedelta(days=today.weekday())
