@@ -113,10 +113,7 @@ if uploaded_file is not None:
     st.metric("Total de Audiências", len(audiencias_df))
 
     st.subheader("Prazos")
-    st.dataframe(prazos_df)
+    st.dataframe(prazos_df[['DATA']])  # Exibir apenas a coluna DATA no formato dia/mês/ano
 
     st.subheader("Audiências")
-    st.dataframe(audiencias_df)
-
-    st.subheader("Iniciais")
-    st.dataframe(iniciais_df)
+    st.dataframe(audiencias_df[['DATA']])  # Exibir apenas a coluna DATA no formato dia/mês/ano
