@@ -9,7 +9,7 @@ uploaded_file = st.file_uploader("Faça upload da planilha .xlsx", type=["xlsx"]
 if uploaded_file is not None:
     def load_data(file):
         xls = pd.ExcelFile(file)
-        prazos_df = pd.read_excel(xls, sheet_name="Prazos", dtype=str, header=0)
+        prazos_df = pd.read_excel(xls, sheet_name="Prazos", dtype=str, header=1)
         audiencias_df = pd.read_excel(xls, sheet_name="Audiências", dtype=str, header=0)
         iniciais_df = pd.read_excel(xls, sheet_name="Iniciais", dtype=str, header=0)
         
@@ -21,9 +21,9 @@ if uploaded_file is not None:
 
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-    # Ajustar a coluna "Unnamed: 0" para exibir apenas a data no formato dia/mês/ano
-    if "Unnamed: 0" in prazos_df.columns:
-        prazos_df["Unnamed: 0"] = pd.to_datetime(prazos_df["Unnamed: 0"], errors='coerce').dt.strftime("%d/%m/%Y")
+    # Ajustar a coluna "DATA" para exibir apenas a data no formato dia/mês/ano
+    if "DATA" in prazos_df.columns:
+        prazos_df["DATA"] = pd.to_datetime(prazos_df["DATA"], errors='coerce').dt.strftime("%d/%m/%Y")
 
     # Função para normalizar horários
     def normalize_time(time_str):
@@ -85,29 +85,29 @@ if uploaded_file is not None:
 
     if prazos_filter == "Semana Passada":
         prazos_df = prazos_df[
-            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') >= last_week_start) &
-            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= last_week_end)
+            (pd.to_datetime(prazos_df["DATA"], format="%d/%m/%Y", errors='coerce') >= last_week_start) &
+            (pd.to_datetime(prazos_df["DATA"], format="%d/%m/%Y", errors='coerce') <= last_week_end)
         ]
     elif prazos_filter == "Esta Semana":
         prazos_df = prazos_df[
-            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') >= start_of_week) &
-            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= end_of_week)
+            (pd.to_datetime(prazos_df["DATA"], format="%d/%m/%Y", errors='coerce') >= start_of_week) &
+            (pd.to_datetime(prazos_df["DATA"], format="%d/%m/%Y", errors='coerce') <= end_of_week)
         ]
     elif prazos_filter == "Semana Seguinte":
         prazos_df = prazos_df[
-            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') >= next_week_start) &
-            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= next_week_end)
+            (pd.to_datetime(prazos_df["DATA"], format="%d/%m/%Y", errors='coerce') >= next_week_start) &
+            (pd.to_datetime(prazos_df["DATA"], format="%d/%m/%Y", errors='coerce') <= next_week_end)
         ]
     elif prazos_filter == "Próximos 15 Dias":
         prazos_df = prazos_df[
-            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= next_15_days)
+            (pd.to_datetime(prazos_df["DATA"], format="%d/%m/%Y", errors='coerce') <= next_15_days)
         ]
 
     # Filtro por complexidade na aba prazos
-    if "Unnamed: 9" in prazos_df.columns:
-        complexidade_options = prazos_df["Unnamed: 9"].dropna().unique()
+    if "COMPLEXIDADE" in prazos_df.columns:
+        complexidade_options = prazos_df["COMPLEXIDADE"].dropna().unique()
         complexidade_filter = st.sidebar.multiselect("Filtrar por Complexidade", options=complexidade_options, default=complexidade_options)
-        prazos_df = prazos_df[prazos_df["Unnamed: 9"].isin(complexidade_filter)]
+        prazos_df = prazos_df[prazos_df["COMPLEXIDADE"].isin(complexidade_filter)]
 
     # Filtro para audiências
     st.sidebar.subheader("Filtros para Audiências")
@@ -137,8 +137,10 @@ if uploaded_file is not None:
     st.sidebar.subheader("Busca por Cliente")
     cliente_filter = st.sidebar.text_input("Digite o nome do cliente")
     if cliente_filter:
-        prazos_df = prazos_df[prazos_df["CLIENTE"].str.contains(cliente_filter, case=False, na=False)]
-        audiencias_df = audiencias_df[audiencias_df["RAZÃO SOCIAL"].str.contains(cliente_filter, case=False, na=False)]
+        if "CLIENTE" in prazos_df.columns:
+            prazos_df = prazos_df[prazos_df["CLIENTE"].str.contains(cliente_filter, case=False, na=False)]
+        if "RAZÃO SOCIAL" in audiencias_df.columns:
+            audiencias_df = audiencias_df[audiencias_df["RAZÃO SOCIAL"].str.contains(cliente_filter, case=False, na=False)]
 
     # Exibição dos dados
     st.metric("Total de Prazos", len(prazos_df))
