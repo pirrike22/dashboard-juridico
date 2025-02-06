@@ -12,17 +12,14 @@ if uploaded_file is not None:
     # Função para carregar os dados
     def load_data(file):
         xls = pd.ExcelFile(file)
-        prazos_df = pd.read_excel(xls, sheet_name="Prazos", dtype=str)
-        audiencias_df = pd.read_excel(xls, sheet_name="Audiências", dtype=str)
-        iniciais_df = pd.read_excel(xls, sheet_name="Iniciais", dtype=str)
+        prazos_df = pd.read_excel(xls, sheet_name="Prazos", dtype=str, header=0)
+        audiencias_df = pd.read_excel(xls, sheet_name="Audiências", dtype=str, header=0)
+        iniciais_df = pd.read_excel(xls, sheet_name="Iniciais", dtype=str, header=0)
         
-        # Ajustar colunas para a aba 'Prazos'
-        prazos_df.columns = prazos_df.iloc[0]  # Definir a primeira linha como cabeçalho
-        prazos_df = prazos_df[1:].reset_index(drop=True)  # Remover a linha de cabeçalho duplicada
-        
-        # Renomear colunas e remover colunas vazias
-        prazos_df.rename(columns={"Unnamed: 0": "DATA"}, inplace=True)
-        prazos_df = prazos_df.drop(columns=[col for col in prazos_df.columns if "Unnamed" in col], errors='ignore')
+        # Remover colunas vazias
+        prazos_df = prazos_df.dropna(axis=1, how='all')
+        audiencias_df = audiencias_df.dropna(axis=1, how='all')
+        iniciais_df = iniciais_df.dropna(axis=1, how='all')
         
         return prazos_df, audiencias_df, iniciais_df
 
@@ -105,4 +102,3 @@ if uploaded_file is not None:
     st.dataframe(iniciais_df)
 
     st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
-
