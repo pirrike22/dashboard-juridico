@@ -37,7 +37,7 @@ if uploaded_file is not None:
     if "DATA" in audiencias_df.columns:
         audiencias_df["DATA"] = pd.to_datetime(audiencias_df["DATA"], errors='coerce').dt.strftime("%d/%m/%Y")
     if "HORÁRIO" in audiencias_df.columns:
-        audiencias_df["HORÁRIO"] = audiencias_df["HORÁRIO"].apply(lambda x: pd.to_datetime(x, errors='coerce').strftime("%H:%M") if x else "00:00")
+        audiencias_df["HORÁRIO"] = audiencias_df["HORÁRIO"].apply(lambda x: pd.to_datetime(x, errors='coerce').strftime("%H:%M") if pd.notna(x) and x != "" else "00:00")
     if "DATA" in iniciais_df.columns:
         iniciais_df["DATA"] = pd.to_datetime(iniciais_df["DATA"], errors='coerce').dt.strftime("%d/%m/%Y")
 
@@ -102,3 +102,4 @@ if uploaded_file is not None:
     st.dataframe(iniciais_df)
 
     st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
+
