@@ -21,14 +21,13 @@ if uploaded_file is not None:
 
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-    # Ajustar as colunas de data para garantir que os filtros funcionem corretamente
-    def adjust_date_columns(df, columns):
-        for col in columns:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%d/%m/%Y")
+    # Forçar a conversão do campo "DATA" em prazos para o formato dia/mês/ano
+    if 'DATA' in prazos_df.columns:
+        prazos_df['DATA'] = pd.to_datetime(prazos_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
 
-    adjust_date_columns(prazos_df, ['DATA'])
-    adjust_date_columns(audiencias_df, ['DATA'])
+    # Forçar a conversão do campo "DATA" em audiências para o formato dia/mês/ano
+    if 'DATA' in audiencias_df.columns:
+        audiencias_df['DATA'] = pd.to_datetime(audiencias_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
 
     # Criar os intervalos de data para os filtros
     now = datetime.now()
