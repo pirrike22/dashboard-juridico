@@ -21,15 +21,16 @@ if uploaded_file is not None:
 
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-    # Forçar a conversão do campo "DATA" em prazos, audiências e iniciais para o formato dia/mês/ano
-    def convert_date_format(df, column_name):
-        if column_name in df.columns:
-            df[column_name] = pd.to_datetime(df[column_name], errors='coerce').dt.strftime("%d/%m/%Y")
-        return df
+    # Ensure the 'DATA' columns in prazos_df and audiencias_df are converted to the Brazilian date format (day/month/year)
+    if 'DATA' in prazos_df.columns:
+        prazos_df['DATA'] = pd.to_datetime(prazos_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
 
-    prazos_df = convert_date_format(prazos_df, 'DATA')
-    audiencias_df = convert_date_format(audiencias_df, 'DATA')
-    iniciais_df = convert_date_format(iniciais_df, 'DATA')
+    if 'DATA' in audiencias_df.columns:
+        audiencias_df['DATA'] = pd.to_datetime(audiencias_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
+
+    # Forçar a conversão do campo "DATA" em iniciais para o formato dia/mês/ano
+    if 'DATA' in iniciais_df.columns:
+        iniciais_df['DATA'] = pd.to_datetime(iniciais_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
 
     # Criar os intervalos de data para os filtros
     now = datetime.now()
@@ -120,6 +121,9 @@ if uploaded_file is not None:
 
     st.subheader("Audiências")
     st.dataframe(audiencias_df)
+
+    st.subheader("Iniciais")
+    st.dataframe(iniciais_df)
 
     st.subheader("Iniciais")
     st.dataframe(iniciais_df)
