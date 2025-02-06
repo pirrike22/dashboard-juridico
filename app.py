@@ -20,11 +20,14 @@ if uploaded_file is not None:
     # Carregar os dados
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-    # Converter colunas de data para datetime
-    prazos_df.iloc[:, 0] = pd.to_datetime(prazos_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
-    audiencias_df.iloc[:, 0] = pd.to_datetime(audiencias_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
-    audiencias_df.iloc[:, 1] = pd.to_datetime(audiencias_df.iloc[:, 1], errors='coerce').dt.strftime("%H:%M")
-    iniciais_df.iloc[:, 0] = pd.to_datetime(iniciais_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
+    # Garantir que colunas de data sejam convertidas corretamente
+    if not prazos_df.empty:
+        prazos_df.iloc[:, 0] = pd.to_datetime(prazos_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
+    if not audiencias_df.empty:
+        audiencias_df.iloc[:, 0] = pd.to_datetime(audiencias_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
+        audiencias_df.iloc[:, 1] = pd.to_datetime(audiencias_df.iloc[:, 1], errors='coerce').dt.strftime("%H:%M").fillna('')
+    if not iniciais_df.empty:
+        iniciais_df.iloc[:, 0] = pd.to_datetime(iniciais_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
 
     # Definir período de filtragem
     hoje = datetime.today()
@@ -34,10 +37,10 @@ if uploaded_file is not None:
 
     # Filtros estratégicos
     st.sidebar.header("Filtros Estratégicos")
-    responsavel = st.sidebar.multiselect("Filtrar por responsável", prazos_df.iloc[:, 4].dropna().unique())
-    complexidade = st.sidebar.multiselect("Filtrar por complexidade", prazos_df.iloc[:, 9].dropna().unique())
-    status = st.sidebar.multiselect("Filtrar por status", prazos_df.iloc[:, 11].dropna().unique())
-    tipo_audiencia = st.sidebar.multiselect("Filtrar por tipo de audiência", audiencias_df.iloc[:, 7].dropna().unique())
+    responsavel = st.sidebar.multiselect("Filtrar por responsável", prazos_df.iloc[:, 4].dropna().unique() if not prazos_df.empty else [])
+    complexidade = st.sidebar.multiselect("Filtrar por complexidade", prazos_df.iloc[:, 9].dropna().unique() if not prazos_df.empty else [])
+    status = st.sidebar.multiselect("Filtrar por status", prazos_df.iloc[:, 11].dropna().unique() if not prazos_df.empty else [])
+    tipo_audiencia = st.sidebar.multiselect("Filtrar por tipo de audiência", audiencias_df.iloc[:, 7].dropna().unique() if not audiencias_df.empty else [])
     cliente = st.sidebar.text_input("Buscar por cliente")
 
     # Filtro de prazos e audiências por período
@@ -54,8 +57,10 @@ if uploaded_file is not None:
             return df[(df[column] >= quinze_dias[0]) & (df[column] <= quinze_dias[1])]
         return df
 
-    prazos_df = filter_by_period(prazos_df, prazos_df.columns[0], periodo)
-    audiencias_df = filter_by_period(audiencias_df, audiencias_df.columns[0], periodo)
+    if not prazos_df.empty:
+        prazos_df = filter_by_period(prazos_df, prazos_df.columns[0], periodo)
+    if not audiencias_df.empty:
+        audiencias_df = filter_by_period(audiencias_df, audiencias_df.columns[0], periodo)
 
     if not prazos_df.empty and responsavel:
         prazos_df = prazos_df[prazos_df.iloc[:, 4].isin(responsavel)]
@@ -66,23 +71,34 @@ if uploaded_file is not None:
     if not audiencias_df.empty and tipo_audiencia:
         audiencias_df = audiencias_df[audiencias_df.iloc[:, 7].isin(tipo_audiencia)]
     if cliente:
-        prazos_df = prazos_df[prazos_df.iloc[:, 1].astype(str).str.contains(cliente, na=False, case=False)]
-        audiencias_df = audiencias_df[audiencias_df.iloc[:, 2].astype(str).str.contains(cliente, na=False, case=False)]
-        iniciais_df = iniciais_df[iniciais_df.iloc[:, 1].astype(str).str.contains(cliente, na=False, case=False)]
+        if not prazos_df.empty:
+            prazos_df = prazos_df[prazos_df.iloc[:, 1].astype(str).str.contains(cliente, na=False, case=False)]
+        if not audiencias_df.empty:
+            audiencias_df = audiencias_df[audiencias_df.iloc[:, 2].astype(str).str.contains(cliente, na=False, case=False)]
+        if not iniciais_df.empty:
+            iniciais_df = iniciais_df[iniciais_df.iloc[:, 1].astype(str).str.contains(cliente, na=False, case=False)]
 
     # Exibir contadores
-    st.metric("Total de Prazos", len(prazos_df))
-    st.metric("Total de Audiências", len(audiencias_df))
+    st.metric("Total de Prazos", len(prazos_df) if not prazos_df.empty else 0)
+    st.metric("Total de Audiências", len(audiencias_df) if not audiencias_df.empty else 0)
 
     # Exibir tabelas
     st.subheader("Prazos")
-    st.dataframe(prazos_df)
+    if not prazos_df.empty:
+        st.dataframe(prazos_df)
+    else:
+        st.write("Nenhum prazo encontrado para os filtros selecionados.")
 
     st.subheader("Audiências")
-    st.dataframe(audiencias_df)
+    if not audiencias_df.empty:
+        st.dataframe(audiencias_df)
+    else:
+        st.write("Nenhuma audiência encontrada para os filtros selecionados.")
 
     st.subheader("Iniciais")
-    st.dataframe(iniciais_df)
+    if not iniciais_df.empty:
+        st.dataframe(iniciais_df)
+    else:
+        st.write("Nenhuma inicial encontrada para os filtros selecionados.")
 
     st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
-
