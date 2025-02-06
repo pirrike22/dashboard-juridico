@@ -17,8 +17,12 @@ if uploaded_file is not None:
         iniciais_df = pd.read_excel(xls, sheet_name="Iniciais", dtype=str)
         
         # Ajustar colunas para a aba 'Prazos'
-        prazos_df.columns = prazos_df.iloc[0]
-        prazos_df = prazos_df[1:].reset_index(drop=True)
+        prazos_df.columns = prazos_df.iloc[0]  # Definir a primeira linha como cabeçalho
+        prazos_df = prazos_df[1:].reset_index(drop=True)  # Remover a linha de cabeçalho duplicada
+        
+        # Renomear colunas e remover colunas vazias
+        prazos_df.rename(columns={"Unnamed: 0": "DATA"}, inplace=True)
+        prazos_df = prazos_df.drop(columns=[col for col in prazos_df.columns if "Unnamed" in col], errors='ignore')
         
         return prazos_df, audiencias_df, iniciais_df
 
@@ -36,7 +40,7 @@ if uploaded_file is not None:
     if "DATA" in audiencias_df.columns:
         audiencias_df["DATA"] = pd.to_datetime(audiencias_df["DATA"], errors='coerce').dt.strftime("%d/%m/%Y")
     if "HORÁRIO" in audiencias_df.columns:
-        audiencias_df["HORÁRIO"] = pd.to_datetime(audiencias_df["HORÁRIO"], errors='coerce').dt.strftime("%H:%M").fillna('00:00')
+        audiencias_df["HORÁRIO"] = audiencias_df["HORÁRIO"].apply(lambda x: pd.to_datetime(x, errors='coerce').strftime("%H:%M") if x else "00:00")
     if "DATA" in iniciais_df.columns:
         iniciais_df["DATA"] = pd.to_datetime(iniciais_df["DATA"], errors='coerce').dt.strftime("%d/%m/%Y")
 
@@ -101,3 +105,4 @@ if uploaded_file is not None:
     st.dataframe(iniciais_df)
 
     st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
+
