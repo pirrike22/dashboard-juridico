@@ -125,3 +125,6 @@ if uploaded_file is not None:
     st.dataframe(iniciais_df)
 
     st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
+    st.dataframe(iniciais_df)
+
+    st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
