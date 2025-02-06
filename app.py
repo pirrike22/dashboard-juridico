@@ -25,7 +25,7 @@ if uploaded_file is not None:
         prazos_df.iloc[:, 0] = pd.to_datetime(prazos_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
     if not audiencias_df.empty:
         audiencias_df.iloc[:, 0] = pd.to_datetime(audiencias_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
-        audiencias_df.iloc[:, 1] = pd.to_datetime(audiencias_df.iloc[:, 1], errors='coerce').dt.strftime("%H:%M").fillna('')
+        audiencias_df.iloc[:, 1] = pd.to_datetime(audiencias_df.iloc[:, 1], errors='coerce').dt.strftime("%H:%M").fillna('00:00')
     if not iniciais_df.empty:
         iniciais_df.iloc[:, 0] = pd.to_datetime(iniciais_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
 
