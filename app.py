@@ -21,9 +21,10 @@ if uploaded_file is not None:
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
     # Converter colunas de data para datetime
-    prazos_df.iloc[:, 0] = pd.to_datetime(prazos_df.iloc[:, 0], errors='coerce')
-    audiencias_df.iloc[:, 0] = pd.to_datetime(audiencias_df.iloc[:, 0], errors='coerce')
-    iniciais_df.iloc[:, 0] = pd.to_datetime(iniciais_df.iloc[:, 0], errors='coerce')
+    prazos_df.iloc[:, 0] = pd.to_datetime(prazos_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
+    audiencias_df.iloc[:, 0] = pd.to_datetime(audiencias_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
+    audiencias_df.iloc[:, 1] = pd.to_datetime(audiencias_df.iloc[:, 1], errors='coerce').dt.strftime("%H:%M")
+    iniciais_df.iloc[:, 0] = pd.to_datetime(iniciais_df.iloc[:, 0], errors='coerce').dt.strftime("%d/%m/%Y")
 
     # Definir período de filtragem
     hoje = datetime.today()
@@ -44,6 +45,7 @@ if uploaded_file is not None:
 
     # Aplicar filtros
     def filter_by_period(df, column, period):
+        df[column] = pd.to_datetime(df[column], errors='coerce')
         if period == "Esta semana":
             return df[(df[column] >= semana_atual[0]) & (df[column] <= semana_atual[1])]
         elif period == "Semana seguinte":
@@ -68,6 +70,10 @@ if uploaded_file is not None:
         audiencias_df = audiencias_df[audiencias_df.iloc[:, 2].astype(str).str.contains(cliente, na=False, case=False)]
         iniciais_df = iniciais_df[iniciais_df.iloc[:, 1].astype(str).str.contains(cliente, na=False, case=False)]
 
+    # Exibir contadores
+    st.metric("Total de Prazos", len(prazos_df))
+    st.metric("Total de Audiências", len(audiencias_df))
+
     # Exibir tabelas
     st.subheader("Prazos")
     st.dataframe(prazos_df)
@@ -79,3 +85,4 @@ if uploaded_file is not None:
     st.dataframe(iniciais_df)
 
     st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
+
