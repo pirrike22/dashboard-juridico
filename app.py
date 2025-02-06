@@ -76,12 +76,19 @@ if uploaded_file is not None:
     next_week_start = end_of_week + timedelta(days=1)
     next_week_end = next_week_start + timedelta(days=6)
     next_15_days = today + timedelta(days=15)
+    last_week_start = start_of_week - timedelta(days=7)
+    last_week_end = start_of_week - timedelta(days=1)
 
     # Filtro para prazos
     st.sidebar.subheader("Filtros para Prazos")
-    prazos_filter = st.sidebar.selectbox("Selecione o filtro", ["Todos", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
+    prazos_filter = st.sidebar.selectbox("Selecione o filtro", ["Todos", "Semana Passada", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
 
-    if prazos_filter == "Esta Semana":
+    if prazos_filter == "Semana Passada":
+        prazos_df = prazos_df[
+            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') >= last_week_start) &
+            (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= last_week_end)
+        ]
+    elif prazos_filter == "Esta Semana":
         prazos_df = prazos_df[
             (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') >= start_of_week) &
             (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= end_of_week)
@@ -96,11 +103,22 @@ if uploaded_file is not None:
             (pd.to_datetime(prazos_df["Unnamed: 0"], format="%d/%m/%Y", errors='coerce') <= next_15_days)
         ]
 
+    # Filtro por complexidade na aba prazos
+    if "Unnamed: 9" in prazos_df.columns:
+        complexidade_options = prazos_df["Unnamed: 9"].dropna().unique()
+        complexidade_filter = st.sidebar.multiselect("Filtrar por Complexidade", options=complexidade_options, default=complexidade_options)
+        prazos_df = prazos_df[prazos_df["Unnamed: 9"].isin(complexidade_filter)]
+
     # Filtro para audiências
     st.sidebar.subheader("Filtros para Audiências")
-    audiencias_filter = st.sidebar.selectbox("Selecione o filtro para Audiências", ["Todos", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
+    audiencias_filter = st.sidebar.selectbox("Selecione o filtro para Audiências", ["Todos", "Semana Passada", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
 
-    if audiencias_filter == "Esta Semana":
+    if audiencias_filter == "Semana Passada":
+        audiencias_df = audiencias_df[
+            (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') >= last_week_start) &
+            (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') <= last_week_end)
+        ]
+    elif audiencias_filter == "Esta Semana":
         audiencias_df = audiencias_df[
             (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') >= start_of_week) &
             (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') <= end_of_week)
@@ -114,6 +132,13 @@ if uploaded_file is not None:
         audiencias_df = audiencias_df[
             (pd.to_datetime(audiencias_df["DATA"], format="%d/%m/%Y", errors='coerce') <= next_15_days)
         ]
+
+    # Filtro de busca por cliente
+    st.sidebar.subheader("Busca por Cliente")
+    cliente_filter = st.sidebar.text_input("Digite o nome do cliente")
+    if cliente_filter:
+        prazos_df = prazos_df[prazos_df["CLIENTE"].str.contains(cliente_filter, case=False, na=False)]
+        audiencias_df = audiencias_df[audiencias_df["RAZÃO SOCIAL"].str.contains(cliente_filter, case=False, na=False)]
 
     # Exibição dos dados
     st.metric("Total de Prazos", len(prazos_df))
