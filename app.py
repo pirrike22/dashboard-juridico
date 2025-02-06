@@ -25,9 +25,9 @@ if uploaded_file is not None:
     def adjust_date_columns(df, columns):
         for col in columns:
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%d/%m/%Y")
 
-    adjust_date_columns(prazos_df, ['DATA', 'DATA DE CIÊNCIA', 'DATA DA DELEGAÇÃO', 'PRAZO INTERNO (DEL.+5)', 'DATA DA ENTREGA'])
+    adjust_date_columns(prazos_df, ['DATA'])
     adjust_date_columns(audiencias_df, ['DATA'])
 
     # Criar os intervalos de data para os filtros
@@ -42,6 +42,7 @@ if uploaded_file is not None:
 
     # Revisar os filtros para prazos
     def filter_prazos(df, filter_option):
+        df['DATA'] = pd.to_datetime(df['DATA'], format="%d/%m/%Y", errors='coerce')
         if filter_option == "Semana Passada":
             return df[(df['DATA'] >= last_week_start) & (df['DATA'] <= last_week_end)]
         elif filter_option == "Esta Semana":
@@ -55,6 +56,7 @@ if uploaded_file is not None:
 
     # Revisar os filtros para audiências
     def filter_audiencias(df, filter_option):
+        df['DATA'] = pd.to_datetime(df['DATA'], format="%d/%m/%Y", errors='coerce')
         if filter_option == "Semana Passada":
             return df[(df['DATA'] >= last_week_start) & (df['DATA'] <= last_week_end)]
         elif filter_option == "Esta Semana":
@@ -69,6 +71,8 @@ if uploaded_file is not None:
     # Adicionar filtro para tipo de audiência
     def filter_tipo_audiencia(df, tipo):
         if "TIPO DE AUDIÊNCIA" in df.columns:
+            if tipo == "Todos":
+                return df
             return df[df["TIPO DE AUDIÊNCIA"].str.contains(tipo, case=False, na=False)]
         return df
 
@@ -77,13 +81,25 @@ if uploaded_file is not None:
     prazos_filter = st.sidebar.selectbox("Selecione o filtro para Prazos", ["Todos", "Semana Passada", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
     prazos_df = filter_prazos(prazos_df, prazos_filter)
 
+    # Filtro por complexidade na aba prazos
+    if "COMPLEXIDADE" in prazos_df.columns:
+        complexidade_options = prazos_df["COMPLEXIDADE"].dropna().unique()
+        complexidade_filter = st.sidebar.multiselect("Filtrar por Complexidade", options=complexidade_options, default=complexidade_options)
+        prazos_df = prazos_df[prazos_df["COMPLEXIDADE"].isin(complexidade_filter)]
+
+    # Filtro por responsável na aba prazos
+    if "RESPONSÁVEL" in prazos_df.columns:
+        responsavel_options = prazos_df["RESPONSÁVEL"].dropna().unique()
+        responsavel_filter = st.sidebar.multiselect("Filtrar por Responsável", options=responsavel_options, default=responsavel_options)
+        prazos_df = prazos_df[prazos_df["RESPONSÁVEL"].isin(responsavel_filter)]
+
     st.sidebar.subheader("Filtros para Audiências")
     audiencias_filter = st.sidebar.selectbox("Selecione o filtro para Audiências", ["Todos", "Semana Passada", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
     audiencias_df = filter_audiencias(audiencias_df, audiencias_filter)
 
-    tipo_audiencia_filter = st.sidebar.text_input("Filtrar por Tipo de Audiência")
-    if tipo_audiencia_filter:
-        audiencias_df = filter_tipo_audiencia(audiencias_df, tipo_audiencia_filter)
+    tipo_audiencia_options = audiencias_df["TIPO DE AUDIÊNCIA"].dropna().unique() if "TIPO DE AUDIÊNCIA" in audiencias_df.columns else []
+    tipo_audiencia_filter = st.sidebar.selectbox("Filtrar por Tipo de Audiência", options=["Todos"] + list(tipo_audiencia_options))
+    audiencias_df = filter_tipo_audiencia(audiencias_df, tipo_audiencia_filter)
 
     # Filtro de busca por cliente
     st.sidebar.subheader("Busca por Cliente")
