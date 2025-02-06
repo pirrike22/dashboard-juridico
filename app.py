@@ -21,12 +21,16 @@ if uploaded_file is not None:
 
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-    # Forçar a conversão do campo "DATA" em prazos e audiências para o formato dia/mês/ano
-    if 'DATA' in prazos_df.columns:
-        prazos_df['DATA'] = pd.to_datetime(prazos_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
+    # Opção para alterar a exibição do campo "DATA"
+    st.sidebar.subheader("Configuração de Exibição de Data")
+    exibir_data_formatada = st.sidebar.checkbox("Exibir data no formato dia/mês/ano", value=True)
 
-    if 'DATA' in audiencias_df.columns:
-        audiencias_df['DATA'] = pd.to_datetime(audiencias_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
+    if exibir_data_formatada:
+        if 'DATA' in prazos_df.columns:
+            prazos_df['DATA'] = pd.to_datetime(prazos_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
+
+        if 'DATA' in audiencias_df.columns:
+            audiencias_df['DATA'] = pd.to_datetime(audiencias_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
 
     # Criar os intervalos de data para os filtros
     now = datetime.now()
@@ -113,7 +117,10 @@ if uploaded_file is not None:
     st.metric("Total de Audiências", len(audiencias_df))
 
     st.subheader("Prazos")
-    st.dataframe(prazos_df[['DATA']])  # Exibir apenas a coluna DATA no formato dia/mês/ano
+    st.dataframe(prazos_df)
 
     st.subheader("Audiências")
-    st.dataframe(audiencias_df[['DATA']])  # Exibir apenas a coluna DATA no formato dia/mês/ano
+    st.dataframe(audiencias_df)
+
+    st.subheader("Iniciais")
+    st.dataframe(iniciais_df)
