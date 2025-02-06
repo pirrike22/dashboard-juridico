@@ -1,108 +1,81 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import plotly.express as px
-import plotly.graph_objects as go
-import io
 
-# Configuração inicial do Streamlit
-st.set_page_config(
-    page_title="Dashboard Jurídica",
-    page_icon="⚖️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Criar o app
+st.title("Dashboard Jurídico")
 
-# Função para carregar e processar os dados
-def load_data(uploaded_file):
-    try:
-        excel_file = io.BytesIO(uploaded_file.getvalue())
-        xls = pd.ExcelFile(excel_file)
-        
-        required_sheets = {'prazos': 'Prazos', 'audiencias': 'Audiências', 'iniciais': 'Iniciais'}
-        dfs = {}
-        
-        for key, sheet in required_sheets.items():
-            if sheet in xls.sheet_names:
-                dfs[key] = pd.read_excel(xls, sheet, header=0)
-                dfs[key].columns = dfs[key].columns.str.strip()
-                if 'Data' in dfs[key].columns:
-                    dfs[key]['Data'] = pd.to_datetime(dfs[key]['Data'], errors='coerce')
-                if key == 'audiencias' and 'Horário' in dfs[key].columns:
-                    dfs[key]['Horário'] = pd.to_datetime(dfs[key]['Horário'], errors='coerce').dt.time
-            else:
-                st.error(f"A aba '{sheet}' não foi encontrada no arquivo.")
-                return None, None, None
-        
-        return dfs['prazos'], dfs['audiencias'], dfs['iniciais']
-        
-    except Exception as e:
-        st.error(f"Erro ao processar o arquivo: {str(e)}")
-        return None, None, None
+# Solicitar upload do arquivo
+uploaded_file = st.file_uploader("Faça upload da planilha .xlsx", type=["xlsx"])
 
-# Interface principal
-st.title("🔍 Dashboard Jurídica")
+if uploaded_file is not None:
+    # Função para carregar os dados
+    def load_data(file):
+        xls = pd.ExcelFile(file)
+        prazos_df = pd.read_excel(xls, sheet_name="Prazos")
+        audiencias_df = pd.read_excel(xls, sheet_name="Audiências")
+        iniciais_df = pd.read_excel(xls, sheet_name="Iniciais")
+        return prazos_df, audiencias_df, iniciais_df
 
-# Upload do arquivo
-uploaded_file = st.file_uploader(
-    "Faça o upload do arquivo Excel com os dados",
-    type=['xlsx', 'xls']
-)
-
-if not uploaded_file:
-    st.info("👆 Por favor, faça o upload do arquivo Excel para começar.")
-    st.stop()
-
-# Carrega os dados
-with st.spinner("Processando o arquivo..."):
+    # Carregar os dados
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-if prazos_df is None or audiencias_df is None or iniciais_df is None:
-    st.stop()
+    # Converter colunas de data para datetime
+    prazos_df.iloc[:, 0] = pd.to_datetime(prazos_df.iloc[:, 0], errors='coerce')
+    audiencias_df.iloc[:, 0] = pd.to_datetime(audiencias_df.iloc[:, 0], errors='coerce')
+    iniciais_df.iloc[:, 0] = pd.to_datetime(iniciais_df.iloc[:, 0], errors='coerce')
 
-# Seleção da visão
-st.sidebar.title("Filtros")
-view = st.sidebar.radio(
-    "Selecione a visualização",
-    ["Dashboard Geral", "Prazos", "Audiências", "Processos Iniciais"]
-)
+    # Definir período de filtragem
+    hoje = datetime.today()
+    semana_atual = (hoje, hoje + timedelta(days=7))
+    semana_seguinte = (hoje + timedelta(days=7), hoje + timedelta(days=14))
+    quinze_dias = (hoje, hoje + timedelta(days=15))
 
-# Dashboard Geral
-if view == "Dashboard Geral":
-    st.header("📊 Dashboard Geral")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total de Prazos", len(prazos_df))
-    with col2:
-        st.metric("Total de Audiências", len(audiencias_df))
-    with col3:
-        st.metric("Total de Processos", len(iniciais_df))
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if 'Tipo' in prazos_df.columns:
-            fig = px.pie(prazos_df, names='Tipo', title='Distribuição de Tipos de Prazo')
-            st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        if 'Status' in iniciais_df.columns:
-            fig = px.bar(iniciais_df, x='Status', title='Status dos Processos')
-            st.plotly_chart(fig, use_container_width=True)
+    # Filtros estratégicos
+    st.sidebar.header("Filtros Estratégicos")
+    responsavel = st.sidebar.multiselect("Filtrar por responsável", prazos_df.iloc[:, 4].dropna().unique())
+    complexidade = st.sidebar.multiselect("Filtrar por complexidade", prazos_df.iloc[:, 9].dropna().unique())
+    status = st.sidebar.multiselect("Filtrar por status", prazos_df.iloc[:, 11].dropna().unique())
+    tipo_audiencia = st.sidebar.multiselect("Filtrar por tipo de audiência", audiencias_df.iloc[:, 7].dropna().unique())
+    cliente = st.sidebar.text_input("Buscar por cliente")
 
-# Visão de Prazos
-elif view == "Prazos":
-    st.header("⏰ Gestão de Prazos")
+    # Filtro de prazos e audiências por período
+    periodo = st.sidebar.radio("Filtrar por período", ["Esta semana", "Semana seguinte", "Próximos 15 dias", "Todos"])
+
+    # Aplicar filtros
+    def filter_by_period(df, column, period):
+        if period == "Esta semana":
+            return df[(df[column] >= semana_atual[0]) & (df[column] <= semana_atual[1])]
+        elif period == "Semana seguinte":
+            return df[(df[column] >= semana_seguinte[0]) & (df[column] <= semana_seguinte[1])]
+        elif period == "Próximos 15 dias":
+            return df[(df[column] >= quinze_dias[0]) & (df[column] <= quinze_dias[1])]
+        return df
+
+    prazos_df = filter_by_period(prazos_df, prazos_df.columns[0], periodo)
+    audiencias_df = filter_by_period(audiencias_df, audiencias_df.columns[0], periodo)
+
+    if not prazos_df.empty and responsavel:
+        prazos_df = prazos_df[prazos_df.iloc[:, 4].isin(responsavel)]
+    if not prazos_df.empty and complexidade:
+        prazos_df = prazos_df[prazos_df.iloc[:, 9].isin(complexidade)]
+    if not prazos_df.empty and status:
+        prazos_df = prazos_df[prazos_df.iloc[:, 11].isin(status)]
+    if not audiencias_df.empty and tipo_audiencia:
+        audiencias_df = audiencias_df[audiencias_df.iloc[:, 7].isin(tipo_audiencia)]
+    if cliente:
+        prazos_df = prazos_df[prazos_df.iloc[:, 1].astype(str).str.contains(cliente, na=False, case=False)]
+        audiencias_df = audiencias_df[audiencias_df.iloc[:, 2].astype(str).str.contains(cliente, na=False, case=False)]
+        iniciais_df = iniciais_df[iniciais_df.iloc[:, 1].astype(str).str.contains(cliente, na=False, case=False)]
+
+    # Exibir tabelas
+    st.subheader("Prazos")
     st.dataframe(prazos_df)
 
-# Visão de Audiências
-elif view == "Audiências":
-    st.header("👥 Gestão de Audiências")
+    st.subheader("Audiências")
     st.dataframe(audiencias_df)
 
-# Visão de Processos Iniciais
-else:
-    st.header("📝 Gestão de Processos Iniciais")
+    st.subheader("Iniciais")
     st.dataframe(iniciais_df)
 
+    st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
