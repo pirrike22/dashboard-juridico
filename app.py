@@ -12,9 +12,9 @@ if uploaded_file is not None:
     # Função para carregar os dados
     def load_data(file):
         xls = pd.ExcelFile(file)
-        prazos_df = pd.read_excel(xls, sheet_name="Prazos")
-        audiencias_df = pd.read_excel(xls, sheet_name="Audiências")
-        iniciais_df = pd.read_excel(xls, sheet_name="Iniciais")
+        prazos_df = pd.read_excel(xls, sheet_name="Prazos", dtype=str)
+        audiencias_df = pd.read_excel(xls, sheet_name="Audiências", dtype=str)
+        iniciais_df = pd.read_excel(xls, sheet_name="Iniciais", dtype=str)
         
         # Ajustar colunas para a aba 'Prazos'
         prazos_df.columns = prazos_df.iloc[0]
@@ -25,11 +25,10 @@ if uploaded_file is not None:
     # Carregar os dados
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-    # Garantir que valores vazios sejam preenchidos corretamente antes da conversão
-    for df in [prazos_df, audiencias_df, iniciais_df]:
-        for col in ["DATA", "HORÁRIO"]:
-            if col in df.columns:
-                df[col] = df[col].fillna("01/01/1900")  # Evita erros de NaN
+    # Remover valores NaN e espaços extras
+    prazos_df = prazos_df.applymap(lambda x: x.strip() if isinstance(x, str) else x).fillna("")
+    audiencias_df = audiencias_df.applymap(lambda x: x.strip() if isinstance(x, str) else x).fillna("")
+    iniciais_df = iniciais_df.applymap(lambda x: x.strip() if isinstance(x, str) else x).fillna("")
 
     # Converter colunas de data corretamente
     if "DATA" in prazos_df.columns:
@@ -49,10 +48,10 @@ if uploaded_file is not None:
 
     # Filtros estratégicos
     st.sidebar.header("Filtros Estratégicos")
-    responsavel = st.sidebar.multiselect("Filtrar por responsável", prazos_df.get("RESPONSÁVEL", pd.Series()).dropna().unique())
-    complexidade = st.sidebar.multiselect("Filtrar por complexidade", prazos_df.get("COMPLEXIDADE", pd.Series()).dropna().unique())
-    status = st.sidebar.multiselect("Filtrar por status", prazos_df.get("PROTOCOLADO?", pd.Series()).dropna().unique())
-    tipo_audiencia = st.sidebar.multiselect("Filtrar por tipo de audiência", audiencias_df.get("TIPO DE AUDIÊNCIA", pd.Series()).dropna().unique())
+    responsavel = st.sidebar.multiselect("Filtrar por responsável", prazos_df.get("RESPONSÁVEL", pd.Series()).unique())
+    complexidade = st.sidebar.multiselect("Filtrar por complexidade", prazos_df.get("COMPLEXIDADE", pd.Series()).unique())
+    status = st.sidebar.multiselect("Filtrar por status", prazos_df.get("PROTOCOLADO?", pd.Series()).unique())
+    tipo_audiencia = st.sidebar.multiselect("Filtrar por tipo de audiência", audiencias_df.get("TIPO DE AUDIÊNCIA", pd.Series()).unique())
     cliente = st.sidebar.text_input("Buscar por cliente")
 
     # Filtro de prazos e audiências por período
