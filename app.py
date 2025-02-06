@@ -21,15 +21,12 @@ if uploaded_file is not None:
 
     prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
 
-    # Forçar a conversão do campo "DATA" em prazos, audiências e iniciais para o formato dia/mês/ano
+    # Forçar a conversão do campo "DATA" em prazos e audiências para o formato dia/mês/ano
     if 'DATA' in prazos_df.columns:
         prazos_df['DATA'] = pd.to_datetime(prazos_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
 
     if 'DATA' in audiencias_df.columns:
         audiencias_df['DATA'] = pd.to_datetime(audiencias_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
-
-    if 'DATA' in iniciais_df.columns:
-        iniciais_df['DATA'] = pd.to_datetime(iniciais_df['DATA'], errors='coerce').dt.strftime("%d/%m/%Y")
 
     # Criar os intervalos de data para os filtros
     now = datetime.now()
@@ -123,8 +120,3 @@ if uploaded_file is not None:
 
     st.subheader("Iniciais")
     st.dataframe(iniciais_df)
-
-    st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
-    st.dataframe(iniciais_df)
-
-    st.sidebar.markdown("**Atualize a planilha para visualizar novos dados**")
