@@ -1,125 +1,133 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+import numpy as np
 
-st.title("Dashboard Jurídico")
+# Função para carregar os dados do arquivo Excel
+def load_data(file):
+    xls = pd.ExcelFile(file)
+    
+    prazos_data = xls.parse('Prazos')
+    audiencias_data = xls.parse('Audiências')
+    compliance_data = xls.parse('Compliance')
+    iniciais_data = xls.parse('Iniciais')
+    
+    return prazos_data, audiencias_data, compliance_data, iniciais_data
 
-uploaded_file = st.file_uploader("Faça upload da planilha .xlsx", type=["xlsx"])
+# Carregando o arquivo Excel
+st.title('Dashboard Jurídico')
+file = st.file_uploader("Envie o arquivo Excel", type=["xlsx"])
 
-if uploaded_file is not None:
-    def load_data(file):
-        xls = pd.ExcelFile(file)
-        prazos_df = pd.read_excel(xls, sheet_name="Prazos", dtype=str, header=1)
-        audiencias_df = pd.read_excel(xls, sheet_name="Audiências", dtype=str, header=0)
-        iniciais_df = pd.read_excel(xls, sheet_name="Iniciais", dtype=str, header=0)
-        
-        prazos_df = prazos_df.dropna(axis=1, how='all')
-        audiencias_df = audiencias_df.dropna(axis=1, how='all')
-        iniciais_df = iniciais_df.dropna(axis=1, how='all')
-        
-        return prazos_df, audiencias_df, iniciais_df
+if file:
+    prazos, audiencias, compliance, iniciais = load_data(file)
+    st.success('Dados carregados com sucesso!')
 
-    prazos_df, audiencias_df, iniciais_df = load_data(uploaded_file)
+    # Filtros por cliente - Aparecerá tudo relacionado ao cliente nas abas
+    cliente_selecionado = st.text_input("Buscar por cliente:", "")
 
-    # Ensure the 'DATA' columns in prazos_df, audiencias_df, and iniciais_df are converted to the Brazilian date format (day/month/year)
-    def convert_date_format(df, column_name):
-        if column_name in df.columns:
-            df[column_name] = pd.to_datetime(df[column_name], errors='coerce').dt.strftime("%d/%m/%Y")
-        return df
+    # Aba Prazos
+    st.header("Prazos")
+    if cliente_selecionado:
+        prazos = prazos[prazos['Cliente'].str.contains(cliente_selecionado, na=False, case=False)]
 
-    prazos_df = convert_date_format(prazos_df, 'DATA')
-    audiencias_df = convert_date_format(audiencias_df, 'DATA')
-    iniciais_df = convert_date_format(iniciais_df, 'DATA')
+    prazo_periodo = st.selectbox("Filtrar por período dos prazos:", ["Próximos 7 dias", "Próximos 15 dias", "Próximos 30 dias"])
+    if prazo_periodo == "Próximos 7 dias":
+        prazos = prazos[prazos['Data do Prazo'] <= pd.Timestamp.now() + pd.Timedelta(days=7)]
+    elif prazo_periodo == "Próximos 15 dias":
+        prazos = prazos[prazos['Data do Prazo'] <= pd.Timestamp.now() + pd.Timedelta(days=15)]
+    elif prazo_periodo == "Próximos 30 dias":
+        prazos = prazos[prazos['Data do Prazo'] <= pd.Timestamp.now() + pd.Timedelta(days=30)]
 
-    # Criar os intervalos de data para os filtros
-    now = datetime.now()
-    start_of_week = now - timedelta(days=now.weekday())
-    end_of_week = start_of_week + timedelta(days=6)
-    next_week_start = end_of_week + timedelta(days=1)
-    next_week_end = next_week_start + timedelta(days=6)
-    next_15_days = now + timedelta(days=15)
-    last_week_start = start_of_week - timedelta(days=7)
-    last_week_end = start_of_week - timedelta(days=1)
+    complexidade = st.multiselect("Filtrar por complexidade:", options=prazos['Complexidade'].unique())
+    if complexidade:
+        prazos = prazos[prazos['Complexidade'].isin(complexidade)]
 
-    # Revisar os filtros para prazos
-    def filter_prazos(df, filter_option):
-        df['DATA'] = pd.to_datetime(df['DATA'], format="%d/%m/%Y", errors='coerce')
-        if filter_option == "Semana Passada":
-            return df[(df['DATA'] >= last_week_start) & (df['DATA'] <= last_week_end)]
-        elif filter_option == "Esta Semana":
-            return df[(df['DATA'] >= start_of_week) & (df['DATA'] <= end_of_week)]
-        elif filter_option == "Semana Seguinte":
-            return df[(df['DATA'] >= next_week_start) & (df['DATA'] <= next_week_end)]
-        elif filter_option == "Próximos 15 Dias":
-            return df[(df['DATA'] <= next_15_days)]
-        else:
-            return df
+    responsavel_prazos = st.multiselect("Filtrar por responsável:", options=prazos['Responsável'].unique())
+    if responsavel_prazos:
+        prazos = prazos[prazos['Responsável'].isin(responsavel_prazos)]
 
-    # Revisar os filtros para audiências
-    def filter_audiencias(df, filter_option):
-        df['DATA'] = pd.to_datetime(df['DATA'], format="%d/%m/%Y", errors='coerce')
-        if filter_option == "Semana Passada":
-            return df[(df['DATA'] >= last_week_start) & (df['DATA'] <= last_week_end)]
-        elif filter_option == "Esta Semana":
-            return df[(df['DATA'] >= start_of_week) & (df['DATA'] <= end_of_week)]
-        elif filter_option == "Semana Seguinte":
-            return df[(df['DATA'] >= next_week_start) & (df['DATA'] <= next_week_end)]
-        elif filter_option == "Próximos 15 Dias":
-            return df[(df['DATA'] <= next_15_days)]
-        else:
-            return df
+    protocolo_status = st.multiselect("Filtrar por status de protocolo:", options=prazos['Status de Protocolo'].unique())
+    if protocolo_status:
+        prazos = prazos[prazos['Status de Protocolo'].isin(protocolo_status)]
 
-    # Adicionar filtro para tipo de audiência
-    def filter_tipo_audiencia(df, tipo):
-        if "TIPO DE AUDIÊNCIA" in df.columns:
-            if tipo == "Todos":
-                return df
-            return df[df["TIPO DE AUDIÊNCIA"].str.contains(tipo, case=False, na=False)]
-        return df
+    cliente_prazos = st.multiselect("Filtrar por cliente:", options=prazos['Cliente'].unique())
+    if cliente_prazos:
+        prazos = prazos[prazos['Cliente'].isin(cliente_prazos)]
 
-    # Filtros estratégicos
-    st.sidebar.subheader("Filtros para Prazos")
-    prazos_filter = st.sidebar.selectbox("Selecione o filtro para Prazos", ["Todos", "Semana Passada", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
-    prazos_df = filter_prazos(prazos_df, prazos_filter)
+    st.dataframe(prazos)
 
-    # Filtro por complexidade na aba prazos
-    if "COMPLEXIDADE" in prazos_df.columns:
-        complexidade_options = prazos_df["COMPLEXIDADE"].dropna().unique()
-        complexidade_filter = st.sidebar.multiselect("Filtrar por Complexidade", options=complexidade_options, default=complexidade_options)
-        prazos_df = prazos_df[prazos_df["COMPLEXIDADE"].isin(complexidade_filter)]
+    # Aba Audiências
+    st.header("Audiências")
+    if cliente_selecionado:
+        audiencias = audiencias[audiencias['Cliente'].str.contains(cliente_selecionado, na=False, case=False)]
 
-    # Filtro por responsável na aba prazos
-    if "RESPONSÁVEL" in prazos_df.columns:
-        responsavel_options = prazos_df["RESPONSÁVEL"].dropna().unique()
-        responsavel_filter = st.sidebar.multiselect("Filtrar por Responsável", options=responsavel_options, default=responsavel_options)
-        prazos_df = prazos_df[prazos_df["RESPONSÁVEL"].isin(responsavel_filter)]
+    audiencia_data = st.date_input("Filtrar por data de audiências:")
+    if audiencia_data:
+        audiencias = audiencias[audiencias['Data'] == pd.Timestamp(audiencia_data)]
 
-    st.sidebar.subheader("Filtros para Audiências")
-    audiencias_filter = st.sidebar.selectbox("Selecione o filtro para Audiências", ["Todos", "Semana Passada", "Esta Semana", "Semana Seguinte", "Próximos 15 Dias"])
-    audiencias_df = filter_audiencias(audiencias_df, audiencias_filter)
+    cliente_audiencia = st.multiselect("Filtrar por cliente:", options=audiencias['Cliente'].unique())
+    if cliente_audiencia:
+        audiencias = audiencias[audiencias['Cliente'].isin(cliente_audiencia)]
 
-    tipo_audiencia_options = audiencias_df["TIPO DE AUDIÊNCIA"].dropna().unique() if "TIPO DE AUDIÊNCIA" in audiencias_df.columns else []
-    tipo_audiencia_filter = st.sidebar.selectbox("Filtrar por Tipo de Audiência", options=["Todos"] + list(tipo_audiencia_options))
-    audiencias_df = filter_tipo_audiencia(audiencias_df, tipo_audiencia_filter)
+    tipo_audiencia = st.multiselect("Filtrar por tipo de audiência:", options=audiencias['Tipo de Audiência'].unique())
+    if tipo_audiencia:
+        audiencias = audiencias[audiencias['Tipo de Audiência'].isin(tipo_audiencia)]
 
-    # Filtro de busca por cliente
-    st.sidebar.subheader("Busca por Cliente")
-    cliente_filter = st.sidebar.text_input("Digite o nome do cliente")
-    if cliente_filter:
-        if "CLIENTE" in prazos_df.columns:
-            prazos_df = prazos_df[prazos_df["CLIENTE"].str.contains(cliente_filter, case=False, na=False)]
-        if "RAZÃO SOCIAL" in audiencias_df.columns:
-            audiencias_df = audiencias_df[audiencias_df["RAZÃO SOCIAL"].str.contains(cliente_filter, case=False, na=False)]
+    responsavel_audiencias = st.multiselect("Filtrar por responsável:", options=audiencias['Responsável'].unique())
+    if responsavel_audiencias:
+        audiencias = audiencias[audiencias['Responsável'].isin(responsavel_audiencias)]
 
-    # Exibição dos dados
-    st.metric("Total de Prazos", len(prazos_df))
-    st.metric("Total de Audiências", len(audiencias_df))
+    parte_adversa = st.multiselect("Filtrar por parte adversa:", options=audiencias['Parte Adversa'].unique())
+    if parte_adversa:
+        audiencias = audiencias[audiencias['Parte Adversa'].isin(parte_adversa)]
 
-    st.subheader("Prazos")
-    st.dataframe(prazos_df)
+    testemunhas = st.selectbox("Testemunha na agenda:", ["Confirmada", "Pendente"])
+    if testemunhas:
+        audiencias = audiencias[audiencias['Testemunha'] == testemunhas]
 
-    st.subheader("Audiências")
-    st.dataframe(audiencias_df)
+    st.dataframe(audiencias)
 
-    st.subheader("Iniciais")
-    st.dataframe(iniciais_df)
+    # Aba Compliance
+    st.header("Compliance")
+    if cliente_selecionado:
+        compliance = compliance[compliance['Cliente'].str.contains(cliente_selecionado, na=False, case=False)]
+
+    checklist_status = st.multiselect("Filtrar por status do checklist:", options=compliance['Status do Checklist'].unique())
+    if checklist_status:
+        compliance = compliance[compliance['Status do Checklist'].isin(checklist_status)]
+
+    data_entrada = st.date_input("Filtrar por data de entrada:")
+    if data_entrada:
+        compliance = compliance[compliance['Data de Entrada'] == pd.Timestamp(data_entrada)]
+
+    resolucao_status = st.multiselect("Filtrar por status de resolução:", options=compliance['Status de Resolução'].unique())
+    if resolucao_status:
+        compliance = compliance[compliance['Status de Resolução'].isin(resolucao_status)]
+
+    cliente_compliance = st.multiselect("Filtrar por cliente:", options=compliance['Cliente'].unique())
+    if cliente_compliance:
+        compliance = compliance[compliance['Cliente'].isin(cliente_compliance)]
+
+    st.dataframe(compliance)
+
+    # Aba Iniciais
+    st.header("Iniciais")
+    if cliente_selecionado:
+        iniciais = iniciais[iniciais['Cliente'].str.contains(cliente_selecionado, na=False, case=False)]
+
+    data_entrega = st.date_input("Filtrar por data da entrega:")
+    if data_entrega:
+        iniciais = iniciais[iniciais['Data da Entrega'] == pd.Timestamp(data_entrega)]
+
+    responsavel_iniciais = st.multiselect("Filtrar por responsável:", options=iniciais['Responsável'].unique())
+    if responsavel_iniciais:
+        iniciais = iniciais[iniciais['Responsável'].isin(responsavel_iniciais)]
+
+    status_iniciais = st.multiselect("Filtrar por status:", options=iniciais['Status'].unique())
+    if status_iniciais:
+        iniciais = iniciais[iniciais['Status'].isin(status_iniciais)]
+
+    cliente_iniciais = st.multiselect("Filtrar por cliente:", options=iniciais['Cliente'].unique())
+    if cliente_iniciais:
+        iniciais = iniciais[iniciais['Cliente'].isin(cliente_iniciais)]
+
+    st.dataframe(iniciais)
