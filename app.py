@@ -17,6 +17,14 @@ def load_data(file):
     compliance_data.columns = compliance_data.columns.str.strip().str.lower()
     iniciais_data.columns = iniciais_data.columns.str.strip().str.lower()
 
+    # Converter colunas que possuem datas para o formato dia/mês/ano
+    for df in [prazos_data, audiencias_data, compliance_data, iniciais_data]:
+        for col in df.columns:
+            try:
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%d/%m/%Y')
+            except Exception:
+                pass
+
     return prazos_data, audiencias_data, compliance_data, iniciais_data
 
 # Carregando o arquivo Excel
@@ -41,6 +49,7 @@ if file:
     # Aplicar filtros em Prazos
     if prazo_periodo != "Todos":
         days = int(prazo_periodo.split()[1])
+        prazos['Coluna_1'] = pd.to_datetime(prazos['Coluna_1'], format='%d/%m/%Y', errors='coerce')
         prazos = prazos[prazos['Coluna_1'] <= pd.Timestamp.now() + pd.Timedelta(days=days)]
     if complexidade:
         prazos = prazos[prazos['Coluna_2'].isin(complexidade)]
@@ -64,6 +73,7 @@ if file:
 
     # Aplicar filtros em Audiências
     if audiencia_data:
+        audiencias['data'] = pd.to_datetime(audiencias['data'], format='%d/%m/%Y', errors='coerce')
         audiencias = audiencias[audiencias['data'] == pd.Timestamp(audiencia_data)]
     if cliente_audiencia:
         audiencias = audiencias[audiencias['razão social'].isin(cliente_audiencia)]
