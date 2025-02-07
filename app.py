@@ -17,6 +17,12 @@ def load_data(file):
     compliance_data.columns = compliance_data.columns.str.strip().str.lower()
     iniciais_data.columns = iniciais_data.columns.str.strip().str.lower()
 
+    # Converter colunas que possuem datas para o formato dia/mês/ano
+    for df in [prazos_data, audiencias_data, compliance_data, iniciais_data]:
+        for col in df.columns:
+            if 'data' in col:
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%d/%m/%Y')
+
     return prazos_data, audiencias_data, compliance_data, iniciais_data
 
 # Carregando o arquivo Excel
@@ -41,14 +47,29 @@ if file:
 
     # Filtros para Prazos
     st.header("Filtros para Prazos")
-    prazo_periodo = st.selectbox("Filtrar por período dos prazos:", ["Todos", "Próximos 7 dias", "Próximos 15 dias", "Próximos 30 dias"], key="prazo_periodo")
+    prazo_periodo = st.selectbox("Filtrar por período dos prazos:", ["Todos", "Semana Passada", "Essa Semana", "Próximos 7 dias", "Próximos 15 dias", "Esse Mês"], key="prazo_periodo")
     cliente_prazos = st.multiselect("Filtrar por cliente:", options=prazos['cliente'].unique(), key="cliente_prazos")
 
     # Aplicar filtros em Prazos
     if prazo_periodo != "Todos":
-        days = int(prazo_periodo.split()[1])
-        prazos['data'] = pd.to_datetime(prazos['data'], errors='coerce')
-        prazos = prazos[prazos['data'] <= pd.Timestamp.now() + pd.Timedelta(days=days)]
+        prazos['data'] = pd.to_datetime(prazos['data'], format='%d/%m/%Y', errors='coerce')
+        today = pd.Timestamp.now()
+        start_of_week = today - pd.Timedelta(days=today.weekday())
+        end_of_week = start_of_week + pd.Timedelta(days=4)
+
+        if prazo_periodo == "Semana Passada":
+            start = start_of_week - pd.Timedelta(days=7)
+            end = start_of_week - pd.Timedelta(days=1)
+            prazos = prazos[(prazos['data'] >= start) & (prazos['data'] <= end)]
+        elif prazo_periodo == "Essa Semana":
+            prazos = prazos[(prazos['data'] >= start_of_week) & (prazos['data'] <= end_of_week)]
+        elif prazo_periodo == "Próximos 7 dias":
+            prazos = prazos[(prazos['data'] >= today) & (prazos['data'] <= today + pd.Timedelta(days=7))]
+        elif prazo_periodo == "Próximos 15 dias":
+            prazos = prazos[(prazos['data'] >= today) & (prazos['data'] <= today + pd.Timedelta(days=15))]
+        elif prazo_periodo == "Esse Mês":
+            prazos = prazos[prazos['data'].dt.month == today.month]
+
     if cliente_prazos:
         prazos = prazos[prazos['cliente'].isin(cliente_prazos)]
 
@@ -56,13 +77,26 @@ if file:
 
     # Filtros para Audiências
     st.header("Filtros para Audiências")
-    audiencia_data = st.date_input("Filtrar por data de audiências:", key="audiencia_data")
+    audiencia_periodo = st.selectbox("Filtrar por período das audiências:", ["Todos", "Semana Passada", "Essa Semana", "Próximos 7 dias", "Próximos 15 dias", "Esse Mês"], key="audiencia_periodo")
     cliente_audiencia = st.multiselect("Filtrar por cliente:", options=audiencias['razão social'].unique(), key="cliente_audiencia")
 
     # Aplicar filtros em Audiências
-    if audiencia_data:
-        audiencias['data'] = pd.to_datetime(audiencias['data'], errors='coerce')
-        audiencias = audiencias[audiencias['data'] == pd.Timestamp(audiencia_data)]
+    if audiencia_periodo != "Todos":
+        audiencias['data'] = pd.to_datetime(audiencias['data'], format='%d/%m/%Y', errors='coerce')
+
+        if audiencia_periodo == "Semana Passada":
+            start = start_of_week - pd.Timedelta(days=7)
+            end = start_of_week - pd.Timedelta(days=1)
+            audiencias = audiencias[(audiencias['data'] >= start) & (audiencias['data'] <= end)]
+        elif audiencia_periodo == "Essa Semana":
+            audiencias = audiencias[(audiencias['data'] >= start_of_week) & (audiencias['data'] <= end_of_week)]
+        elif audiencia_periodo == "Próximos 7 dias":
+            audiencias = audiencias[(audiencias['data'] >= today) & (audiencias['data'] <= today + pd.Timedelta(days=7))]
+        elif audiencia_periodo == "Próximos 15 dias":
+            audiencias = audiencias[(audiencias['data'] >= today) & (audiencias['data'] <= today + pd.Timedelta(days=15))]
+        elif audiencia_periodo == "Esse Mês":
+            audiencias = audiencias[audiencias['data'].dt.month == today.month]
+
     if cliente_audiencia:
         audiencias = audiencias[audiencias['razão social'].isin(cliente_audiencia)]
 
