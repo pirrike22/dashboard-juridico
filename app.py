@@ -40,11 +40,11 @@ if file:
 
     # Filtros para Prazos
     st.subheader("Filtros para Prazos")
-    prazo_periodo = st.selectbox("Filtrar por período dos prazos:", ["Todos", "Próximos 7 dias", "Próximos 15 dias", "Próximos 30 dias"])
-    complexidade = st.multiselect("Filtrar por complexidade:", options=prazos['Coluna_2'].unique())
-    responsavel_prazos = st.multiselect("Filtrar por responsável:", options=prazos['Coluna_3'].unique())
-    protocolo_status = st.multiselect("Filtrar por status de protocolo:", options=prazos['Coluna_4'].unique())
-    cliente_prazos = st.multiselect("Filtrar por cliente:", options=prazos['Coluna_5'].unique())
+    prazo_periodo = st.selectbox("Filtrar por período dos prazos:", ["Todos", "Próximos 7 dias", "Próximos 15 dias", "Próximos 30 dias"], key="prazo_periodo")
+    complexidade = st.multiselect("Filtrar por complexidade:", options=prazos['Coluna_2'].unique(), key="complexidade")
+    responsavel_prazos = st.multiselect("Filtrar por responsável:", options=prazos['Coluna_3'].unique(), key="responsavel_prazos")
+    protocolo_status = st.multiselect("Filtrar por status de protocolo:", options=prazos['Coluna_4'].unique(), key="protocolo_status")
+    cliente_prazos = st.multiselect("Filtrar por cliente:", options=prazos['Coluna_5'].unique(), key="cliente_prazos")
 
     # Aplicar filtros em Prazos
     if prazo_periodo != "Todos":
@@ -64,12 +64,12 @@ if file:
 
     # Filtros para Audiências
     st.subheader("Filtros para Audiências")
-    audiencia_data = st.date_input("Filtrar por data de audiências:")
-    cliente_audiencia = st.multiselect("Filtrar por cliente:", options=audiencias['razão social'].unique())
-    tipo_audiencia = st.multiselect("Filtrar por tipo de audiência:", options=audiencias['tipo de audiência'].unique())
-    responsavel_audiencias = st.multiselect("Filtrar por responsável:", options=audiencias['responsável'].unique())
-    parte_adversa = st.multiselect("Filtrar por parte adversa:", options=audiencias['parte adversa'].unique())
-    testemunhas = st.selectbox("Testemunha na agenda:", ["Todos", "Confirmada", "Pendente"])
+    audiencia_data = st.date_input("Filtrar por data de audiências:", key="audiencia_data")
+    cliente_audiencia = st.multiselect("Filtrar por cliente:", options=audiencias['razão social'].unique(), key="cliente_audiencia")
+    tipo_audiencia = st.multiselect("Filtrar por tipo de audiência:", options=audiencias['tipo de audiência'].unique(), key="tipo_audiencia")
+    responsavel_audiencias = st.multiselect("Filtrar por responsável:", options=audiencias['responsável'].unique(), key="responsavel_audiencias")
+    parte_adversa = st.multiselect("Filtrar por parte adversa:", options=audiencias['parte adversa'].unique(), key="parte_adversa")
+    testemunhas = st.selectbox("Testemunha na agenda:", ["Todos", "Confirmada", "Pendente"], key="testemunhas")
 
     # Aplicar filtros em Audiências
     if audiencia_data:
